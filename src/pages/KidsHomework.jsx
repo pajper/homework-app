@@ -1,0 +1,302 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useChildAuth } from '../context/ChildAuthContext'
+import HomeworkCard from '../components/HomeworkCard'
+
+const s = {
+  page: { minHeight: '100vh', background: 'var(--bg)', padding: '2rem 1.5rem' },
+  wrap: { maxWidth: '700px', margin: '0 auto' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' },
+  title: { fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 300, color: 'var(--text-primary)', margin: 0 },
+  logoutBtn: { background: 'transparent', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', padding: '6px 14px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-secondary)' },
+  sectionTitle: { fontSize: '13px', fontWeight: 500, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '2rem 0 12px' },
+  exerciseCard: { background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', marginBottom: '10px' },
+  question: { fontSize: '16px', fontWeight: 500, marginBottom: '1rem', lineHeight: 1.5 },
+  options: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' },
+  option: (selected, correct, revealed) => ({
+    padding: '12px 14px', borderRadius: 'var(--radius-md)', fontSize: '15px', cursor: revealed ? 'default' : 'pointer', border: '0.5px solid',
+    borderColor: !selected && !revealed ? 'var(--border-strong)' : revealed && correct ? 'var(--ok)' : revealed && selected && !correct ? 'var(--urgent)' : 'var(--border-strong)',
+    background: !selected && !revealed ? 'transparent' : revealed && correct ? 'var(--ok-light)' : revealed && selected && !correct ? 'var(--urgent-light)' : selected ? 'var(--accent-light)' : 'transparent',
+    color: revealed && correct ? 'var(--ok-text)' : revealed && selected && !correct ? 'var(--urgent-text)' : 'var(--text-primary)',
+    transition: 'all .15s',
+  }),
+  openInput: { width: '100%', padding: '10px 12px', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: '15px', outline: 'none', background: 'var(--surface)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', resize: 'none' },
+  revealBtn: { padding: '8px 16px', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: '13px', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' },
+  answer: (correct) => ({ marginTop: '10px', padding: '10px 12px', borderRadius: 'var(--radius-md)', fontSize: '13px', background: correct ? 'var(--ok-light)' : 'var(--exam-light)', color: correct ? 'var(--ok-text)' : 'var(--exam-text)' }),
+  genBtn: { padding: '12px 24px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '15px', fontWeight: 500, cursor: 'pointer' },
+  genWrap: { textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)' },
+  genSub: { fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '1.5rem' },
+  badge: { display: 'inline-block', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '20px', background: 'var(--accent-light)', color: 'var(--accent-text)', marginLeft: '8px', verticalAlign: 'middle' },
+  loading: { textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' },
+  clickable: { marginBottom: '8px', cursor: 'pointer' },
+}
+
+const norm = (s) => s?.toLowerCase().trim()
+
+async function askAI(question, userAnswer, correctAnswer) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `Du är en hjälpsam och uppmuntrande lärare för skolbarn. Bedöm barnets svar på följande fråga. Svara på svenska i 2-3 korta meningar. Var vänlig och uppmuntrande oavsett om svaret är rätt eller fel.
+
+Fråga: ${question}
+Barnets svar: ${userAnswer || '(inget svar)'}
+Facit: ${correctAnswer}`,
+      }],
+    }),
+  })
+  const data = await response.json()
+  return data.content[0].text
+}
+
+function ExerciseItem({ exercise }) {
+  const [selected, setSelected] = useState(null)
+  const [revealed, setRevealed] = useState(false)
+  const [openAnswer, setOpenAnswer] = useState('')
+  const [selfScore, setSelfScore] = useState(null)
+  const [aiFeedback, setAiFeedback] = useState(null)
+  const [loadingAI, setLoadingAI] = useState(false)
+
+  const isCorrect = (exercise.type === 'multiple_choice' || exercise.type === 'true_false')
+    ? norm(selected) === norm(exercise.correct_answer)
+    : null
+
+  async function handleAskAI() {
+    setLoadingAI(true)
+    try {
+      const feedback = await askAI(exercise.question, openAnswer, exercise.correct_answer)
+      setAiFeedback(feedback)
+    } catch (e) {
+      setAiFeedback('Något gick fel. Försök igen.')
+    }
+    setLoadingAI(false)
+  }
+
+  return (
+    <div style={s.exerciseCard}>
+      <p style={s.question}>{exercise.question}</p>
+
+      {exercise.type === 'multiple_choice' && exercise.options && (
+        <div style={s.options}>
+          {exercise.options.map(opt => (
+            <button key={opt} style={s.option(selected === opt, norm(opt) === norm(exercise.correct_answer), revealed)} onClick={() => !revealed && setSelected(opt)}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {exercise.type === 'true_false' && (
+        <div style={{ ...s.options, gridTemplateColumns: '1fr 1fr', maxWidth: '240px' }}>
+          {['Sant', 'Falskt'].map(opt => (
+            <button key={opt} style={s.option(selected === opt, norm(opt) === norm(exercise.correct_answer), revealed)} onClick={() => !revealed && setSelected(opt)}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {exercise.type === 'open' && (
+        <textarea style={s.openInput} rows={3} value={openAnswer} onChange={e => setOpenAnswer(e.target.value)} placeholder="Skriv ditt svar här..." disabled={revealed} />
+      )}
+
+      {!revealed && (selected || exercise.type === 'open') && (
+        <button style={s.revealBtn} onClick={() => setRevealed(true)}>Visa svar</button>
+      )}
+
+      {revealed && exercise.type !== 'open' && (
+        <div style={s.answer(isCorrect)}>
+          {isCorrect ? '✓ Rätt!' : `✗ Rätt svar: ${exercise.correct_answer}`}
+        </div>
+      )}
+
+      {revealed && exercise.type === 'open' && (
+        <>
+          <div style={s.answer(null)}>Facit: {exercise.correct_answer}</div>
+          {!selfScore && (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button onClick={() => setSelfScore('correct')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--ok)', background: 'var(--ok-light)', color: 'var(--ok-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+                ✓ Jag hade rätt
+              </button>
+              <button onClick={() => setSelfScore('incorrect')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--urgent)', background: 'var(--urgent-light)', color: 'var(--urgent-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+                ✗ Jag hade fel
+              </button>
+            </div>
+          )}
+          {selfScore && !aiFeedback && (
+            <div style={{ marginTop: '8px' }}>
+              <div style={s.answer(selfScore === 'correct')}>
+                {selfScore === 'correct' ? '✓ Bra jobbat!' : '✗ Öva mer på detta'}
+              </div>
+              <button onClick={handleAskAI} disabled={loadingAI} style={{ ...s.revealBtn, marginTop: '8px', fontSize: '12px' }}>
+                {loadingAI ? 'Frågar AI...' : 'Fråga AI om mitt svar'}
+              </button>
+            </div>
+          )}
+          {aiFeedback && (
+            <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent-light)', color: 'var(--accent-text)', fontSize: '13px', lineHeight: 1.6 }}>
+              {aiFeedback}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const PROMPT_SUFFIX = `\n\nSvara ENDAST med ett JSON-array, inga förklaringar:
+[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy"}]
+
+Type kan vara: multiple_choice, open, true_false
+För true_false: options ska vara ["Sant","Falskt"]
+För open: options ska vara null`
+
+function buildClaudeContent(material, count) {
+  const isPdf = material.content?.startsWith('__PDF_BASE64__:')
+  const prompt = `Skapa ${count} övningsfrågor på svenska för ämnet: ${material.subject}.${PROMPT_SUFFIX}`
+  if (isPdf) {
+    return [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: material.content.slice('__PDF_BASE64__:'.length) } },
+      { type: 'text', text: prompt },
+    ]
+  }
+  return `Skapa ${count} övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${material.subject}\nMaterial: ${material.content}${PROMPT_SUFFIX}`
+}
+
+export default function KidsHomework() {
+  const { childId } = useParams()
+  const navigate = useNavigate()
+  const { childUser, logoutChild } = useChildAuth()
+
+  const [materials, setMaterials] = useState([])
+  const [selectedMaterial, setSelectedMaterial] = useState(null)
+  const [exercises, setExercises] = useState([])
+  const [generating, setGenerating] = useState(false)
+  const [loadingExercises, setLoadingExercises] = useState(false)
+  const [questionCount, setQuestionCount] = useState(5)
+
+  useEffect(() => { fetchMaterials() }, [childId])
+
+  async function fetchMaterials() {
+    const { data } = await supabase.from('materials').select('*').eq('child_id', childId).order('due_date', { ascending: true, nullsFirst: false })
+    setMaterials(data ?? [])
+  }
+
+  async function fetchExercises(matId) {
+    setLoadingExercises(true)
+    const { data } = await supabase.from('exercises').select('*').eq('material_id', matId)
+    setExercises(data ?? [])
+    setLoadingExercises(false)
+  }
+
+  async function generateExercises() {
+    if (!selectedMaterial) return
+    setGenerating(true)
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2000,
+          messages: [{
+            role: 'user',
+            content: buildClaudeContent(selectedMaterial, questionCount),
+          }],
+        }),
+      })
+      const data = await response.json()
+      const raw = data.content[0].text.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(raw)
+      const toInsert = parsed.map(ex => ({ ...ex, material_id: selectedMaterial.id, child_id: childId }))
+      await supabase.from('exercises').delete().eq('material_id', selectedMaterial.id)
+      await supabase.from('exercises').insert(toInsert)
+      fetchExercises(selectedMaterial.id)
+    } catch (err) {
+      console.error('Generate error:', err)
+      alert('Något gick fel: ' + err.message)
+    }
+    setGenerating(false)
+  }
+
+  function handleLogout() {
+    logoutChild()
+    navigate('/kids')
+  }
+
+  return (
+    <div style={s.page}>
+      <div style={s.wrap}>
+        <div style={s.header}>
+          <h1 style={s.title}>Hej {childUser?.name ?? ''}!</h1>
+          <button style={s.logoutBtn} onClick={handleLogout}>Byt användare</button>
+        </div>
+
+        <p style={s.sectionTitle}>Mina läxor</p>
+        {materials.length === 0
+          ? <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Inga läxor ännu!</div>
+          : materials.map(m => (
+            <div key={m.id} style={s.clickable} onClick={() => { setSelectedMaterial(m); fetchExercises(m.id) }}>
+              <HomeworkCard material={m} />
+            </div>
+          ))
+        }
+
+        {selectedMaterial && (
+          <>
+            <p style={s.sectionTitle}>
+              Övningar — {selectedMaterial.subject}
+              {exercises.length > 0 && <span style={s.badge}>{exercises.length} st</span>}
+            </p>
+
+            {loadingExercises ? (
+              <div style={s.loading}>Hämtar övningar...</div>
+            ) : exercises.length === 0 ? (
+              <div style={s.genWrap}>
+                <p style={s.genSub}>Inga övningar ännu. Generera övningar baserade på läxmaterialet!</p>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginBottom:'1rem' }}>
+                  <span style={{ fontSize:'13px', color:'var(--text-secondary)' }}>Antal frågor:</span>
+                  {[5, 10, 15, 20].map(n => (
+                    <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'13px', cursor:'pointer' }}>{n}</button>
+                  ))}
+                </div>
+                <button style={s.genBtn} onClick={generateExercises} disabled={generating}>
+                  {generating ? 'Genererar...' : 'Generera övningar med AI'}
+                </button>
+              </div>
+            ) : (
+              <>
+                {exercises.map(ex => <ExerciseItem key={ex.id} exercise={ex} />)}
+                <div style={{ textAlign: 'center', marginTop: '1rem', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'13px', color:'var(--text-secondary)' }}>Antal:</span>
+                  {[5, 10, 15, 20].map(n => (
+                    <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'13px', cursor:'pointer' }}>{n}</button>
+                  ))}
+                  <button style={s.revealBtn} onClick={generateExercises} disabled={generating}>
+                    {generating ? 'Genererar...' : 'Generera nya övningar'}
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
