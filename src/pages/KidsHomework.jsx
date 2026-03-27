@@ -31,6 +31,30 @@ function getEmoji(subject) {
 
 const norm = (s) => s?.toLowerCase().trim()
 
+async function learnMore(question, subject) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{
+        role: 'user',
+        content: `Jag är ett skolbarn och lär mig om "${subject}". Sök på webben och berätta något kul och intressant om detta ämne på svenska. Max 3-4 meningar, enkelt och roligt språk för barn.\n\nFrågan vi just diskuterade: ${question}`,
+      }],
+    }),
+  })
+  const data = await response.json()
+  const textParts = (data.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+  return textParts || 'Kunde inte hitta mer information just nu.'
+}
+
 async function askAI(question, userAnswer, correctAnswer) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -57,12 +81,14 @@ Facit: ${correctAnswer}`,
   return data.content[0].text
 }
 
-function ExerciseItem({ exercise, index, total, onAnswer }) {
+function ExerciseItem({ exercise, index, total, onAnswer, subject }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
   const [openAnswer, setOpenAnswer] = useState('')
   const [aiFeedback, setAiFeedback] = useState(null)
   const [loadingAI, setLoadingAI] = useState(false)
+  const [webInfo, setWebInfo] = useState(null)
+  const [loadingWeb, setLoadingWeb] = useState(false)
 
   const isCorrect = (exercise.type === 'multiple_choice' || exercise.type === 'true_false')
     ? norm(selected) === norm(exercise.correct_answer)
@@ -71,6 +97,17 @@ function ExerciseItem({ exercise, index, total, onAnswer }) {
   function handleReveal() {
     setRevealed(true)
     onAnswer(isCorrect) // null for open questions
+  }
+
+  async function handleLearnMore() {
+    setLoadingWeb(true)
+    try {
+      const info = await learnMore(exercise.question, subject)
+      setWebInfo(info)
+    } catch (e) {
+      setWebInfo('Något gick fel. Försök igen.')
+    }
+    setLoadingWeb(false)
   }
 
   async function handleAskAI() {
@@ -191,17 +228,36 @@ function ExerciseItem({ exercise, index, total, onAnswer }) {
           {!aiFeedback && (
             <button onClick={handleAskAI} disabled={loadingAI} style={{
               padding: '9px 16px', borderRadius: '14px', fontSize: '13px', fontWeight: 500,
-              background: '#EEEDFE', color: '#3C3489', border: 'none', cursor: 'pointer',
+              background: '#EEEDFE', color: '#3C3489', border: 'none', cursor: 'pointer', marginBottom: '8px',
             }}>
               {loadingAI ? '🤔 Tänker...' : '🤖 Fråga AI om mitt svar'}
             </button>
           )}
           {aiFeedback && (
-            <div style={{ padding: '11px 14px', borderRadius: '14px', background: '#EEEDFE', color: '#3C3489', fontSize: '13px', lineHeight: 1.6 }}>
+            <div style={{ padding: '11px 14px', borderRadius: '14px', background: '#EEEDFE', color: '#3C3489', fontSize: '13px', lineHeight: 1.6, marginBottom: '8px' }}>
               🤖 {aiFeedback}
             </div>
           )}
         </>
+      )}
+
+      {revealed && (
+        <div style={{ marginTop: '8px' }}>
+          {!webInfo && (
+            <button onClick={handleLearnMore} disabled={loadingWeb} style={{
+              padding: '9px 16px', borderRadius: '14px', fontSize: '13px', fontWeight: 500,
+              background: '#FEF3C7', color: '#92400E', border: 'none', cursor: loadingWeb ? 'default' : 'pointer',
+              opacity: loadingWeb ? 0.7 : 1,
+            }}>
+              {loadingWeb ? '🔍 Söker...' : '🌍 Ta reda på mer!'}
+            </button>
+          )}
+          {webInfo && (
+            <div style={{ padding: '11px 14px', borderRadius: '14px', background: '#FEF3C7', color: '#78350F', fontSize: '13px', lineHeight: 1.7 }}>
+              🌍 {webInfo}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
@@ -532,7 +588,7 @@ export default function KidsHomework() {
               </div>
             ) : (
               exercises.map((ex, i) => (
-                <ExerciseItem key={ex.id} exercise={ex} index={i} total={exercises.length} onAnswer={handleAnswer} />
+                <ExerciseItem key={ex.id} exercise={ex} index={i} total={exercises.length} onAnswer={handleAnswer} subject={selectedMaterial.subject} />
               ))
             )}
 
