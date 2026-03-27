@@ -103,6 +103,58 @@ export default function UploadMaterial() {
     })
 
     if (insertError) { setError(insertError.message); setLoading(false); return }
+
+    const { data: newMaterial } = await supabase
+      .from('materials')
+      .select('id')
+      .eq('child_id', childId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (newMaterial) {
+      setLoadingMsg('Genererar övningar...')
+      try {
+        const isPdf = content.startsWith('__PDF_BASE64__:')
+        const prompt = `Skapa 15 övningsfrågor på svenska för ämnet: ${subject.trim()}.
+
+Svara ENDAST med ett JSON-array, inga förklaringar:
+[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy"}]
+
+Type kan vara: multiple_choice, open, true_false
+För true_false: options ska vara ["Sant","Falskt"]
+För open: options ska vara null`
+
+        const messageContent = isPdf
+          ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.slice('__PDF_BASE64__:'.length) } }, { type: 'text', text: prompt }]
+          : `Skapa 15 övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${subject.trim()}\nMaterial: ${content}\n\n${prompt}`
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 4000,
+            messages: [{ role: 'user', content: messageContent }],
+          }),
+        })
+        const aiData = await response.json()
+        const raw = aiData.content[0].text.replace(/```json|```/g, '').trim()
+        const exercises = JSON.parse(raw)
+        await supabase.from('exercises').insert(
+          exercises.map(ex => ({ ...ex, material_id: newMaterial.id, child_id: childId }))
+        )
+      } catch (e) {
+        console.error('Auto-generering misslyckades:', e)
+        // Fortsätt ändå — övningar kan genereras manuellt
+      }
+    }
+
     navigate('/')
   }
 

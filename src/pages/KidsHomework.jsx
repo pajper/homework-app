@@ -64,7 +64,6 @@ function ExerciseItem({ exercise }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
   const [openAnswer, setOpenAnswer] = useState('')
-  const [selfScore, setSelfScore] = useState(null)
   const [aiFeedback, setAiFeedback] = useState(null)
   const [loadingAI, setLoadingAI] = useState(false)
 
@@ -124,25 +123,10 @@ function ExerciseItem({ exercise }) {
       {revealed && exercise.type === 'open' && (
         <>
           <div style={s.answer(null)}>Facit: {exercise.correct_answer}</div>
-          {!selfScore && (
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-              <button onClick={() => setSelfScore('correct')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--ok)', background: 'var(--ok-light)', color: 'var(--ok-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                ✓ Jag hade rätt
-              </button>
-              <button onClick={() => setSelfScore('incorrect')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--urgent)', background: 'var(--urgent-light)', color: 'var(--urgent-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                ✗ Jag hade fel
-              </button>
-            </div>
-          )}
-          {selfScore && !aiFeedback && (
-            <div style={{ marginTop: '8px' }}>
-              <div style={s.answer(selfScore === 'correct')}>
-                {selfScore === 'correct' ? '✓ Bra jobbat!' : '✗ Öva mer på detta'}
-              </div>
-              <button onClick={handleAskAI} disabled={loadingAI} style={{ ...s.revealBtn, marginTop: '8px', fontSize: '12px' }}>
-                {loadingAI ? 'Frågar AI...' : 'Fråga AI om mitt svar'}
-              </button>
-            </div>
+          {!aiFeedback && (
+            <button onClick={handleAskAI} disabled={loadingAI} style={{ ...s.revealBtn, marginTop: '8px', fontSize: '12px' }}>
+              {loadingAI ? 'Frågar AI...' : 'Fråga AI om mitt svar'}
+            </button>
           )}
           {aiFeedback && (
             <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent-light)', color: 'var(--accent-text)', fontSize: '13px', lineHeight: 1.6 }}>
@@ -184,7 +168,7 @@ export default function KidsHomework() {
   const [exercises, setExercises] = useState([])
   const [generating, setGenerating] = useState(false)
   const [loadingExercises, setLoadingExercises] = useState(false)
-  const [questionCount, setQuestionCount] = useState(5)
+  const [questionCount, setQuestionCount] = useState(15)
 
   useEffect(() => { fetchMaterials() }, [childId])
 
@@ -260,39 +244,29 @@ export default function KidsHomework() {
 
         {selectedMaterial && (
           <>
-            <p style={s.sectionTitle}>
-              Övningar — {selectedMaterial.subject}
-              {exercises.length > 0 && <span style={s.badge}>{exercises.length} st</span>}
-            </p>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px', margin:'2rem 0 12px' }}>
+              <p style={{ ...s.sectionTitle, margin:0 }}>
+                Övningar — {selectedMaterial.subject}
+                {exercises.length > 0 && <span style={s.badge}>{exercises.length} st</span>}
+              </p>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                {[5, 10, 15, 20].map(n => (
+                  <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'12px', cursor:'pointer' }}>{n}</button>
+                ))}
+                <button style={s.revealBtn} onClick={generateExercises} disabled={generating}>
+                  {generating ? 'Genererar...' : exercises.length === 0 ? 'Generera övningar' : 'Generera nya'}
+                </button>
+              </div>
+            </div>
 
             {loadingExercises ? (
               <div style={s.loading}>Hämtar övningar...</div>
             ) : exercises.length === 0 ? (
               <div style={s.genWrap}>
-                <p style={s.genSub}>Inga övningar ännu. Generera övningar baserade på läxmaterialet!</p>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginBottom:'1rem' }}>
-                  <span style={{ fontSize:'13px', color:'var(--text-secondary)' }}>Antal frågor:</span>
-                  {[5, 10, 15, 20].map(n => (
-                    <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'13px', cursor:'pointer' }}>{n}</button>
-                  ))}
-                </div>
-                <button style={s.genBtn} onClick={generateExercises} disabled={generating}>
-                  {generating ? 'Genererar...' : 'Generera övningar med AI'}
-                </button>
+                <p style={s.genSub}>Inga övningar ännu — klicka "Generera övningar" ovan!</p>
               </div>
             ) : (
-              <>
-                {exercises.map(ex => <ExerciseItem key={ex.id} exercise={ex} />)}
-                <div style={{ textAlign: 'center', marginTop: '1rem', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', flexWrap:'wrap' }}>
-                  <span style={{ fontSize:'13px', color:'var(--text-secondary)' }}>Antal:</span>
-                  {[5, 10, 15, 20].map(n => (
-                    <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'13px', cursor:'pointer' }}>{n}</button>
-                  ))}
-                  <button style={s.revealBtn} onClick={generateExercises} disabled={generating}>
-                    {generating ? 'Genererar...' : 'Generera nya övningar'}
-                  </button>
-                </div>
-              </>
+              exercises.map(ex => <ExerciseItem key={ex.id} exercise={ex} />)
             )}
           </>
         )}
