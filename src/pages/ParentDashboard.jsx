@@ -7,13 +7,13 @@ import HomeworkCard from '../components/HomeworkCard'
 const AVATAR_COLORS = ['#534AB7','#1D9E75','#D85A30','#D4537E','#378ADD','#BA7517']
 
 const s = {
-  page: { minHeight:'100vh', background:'var(--bg)', padding:'2rem 1.5rem' },
+  page: { minHeight:'100vh', background:'var(--bg)', padding:'1.5rem 1rem' },
   header: { maxWidth:'800px', margin:'0 auto 2rem', display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:'1rem' },
   title: { fontFamily:'var(--font-display)', fontSize:'2rem', fontWeight:300, color:'var(--text-primary)' },
   sub: { fontSize:'14px', color:'var(--text-secondary)', marginTop:'2px' },
   main: { maxWidth:'800px', margin:'0 auto' },
   sectionTitle: { fontSize:'13px', fontWeight:500, color:'var(--text-hint)', textTransform:'uppercase', letterSpacing:'0.05em', margin:'0 0 12px' },
-  childGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'12px', marginBottom:'2.5rem' },
+  childGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'10px', marginBottom:'2.5rem' },
   childCard: (active, color) => ({ background: active ? color : 'var(--surface)', border: active ? `1.5px solid ${color}` : '0.5px solid var(--border)', borderRadius:'var(--radius-lg)', padding:'1.25rem', cursor:'pointer', transition:'all .15s' }),
   avatar: (color) => ({ width:'44px', height:'44px', borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:500, fontSize:'16px', marginBottom:'10px' }),
   childName: (active) => ({ fontWeight:500, fontSize:'15px', color: active ? '#fff' : 'var(--text-primary)', margin:0 }),
@@ -49,15 +49,26 @@ export default function ParentDashboard() {
   const [pinChild, setPinChild] = useState(null)
   const [pinValue, setPinValue] = useState('')
   const [pinSaving, setPinSaving] = useState(false)
+  const [sessions, setSessions] = useState([])
 
   useEffect(() => { fetchChildren() }, [])
-  useEffect(() => { if (selectedChild) fetchMaterials(selectedChild.id) }, [selectedChild])
+  useEffect(() => { if (selectedChild) { fetchMaterials(selectedChild.id); fetchSessions(selectedChild.id) } }, [selectedChild])
 
   async function fetchChildren() {
     const { data } = await supabase.from('profiles').select('*').eq('role', 'child').order('created_at')
     setChildren(data ?? [])
     if (data?.length > 0 && !selectedChild) setSelectedChild(data[0])
     setLoading(false)
+  }
+
+  async function fetchSessions(childId) {
+    const { data } = await supabase
+      .from('exercise_sessions')
+      .select('*, materials(subject)')
+      .eq('child_id', childId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setSessions(data ?? [])
   }
 
   async function fetchMaterials(childId) {
@@ -167,6 +178,30 @@ export default function ParentDashboard() {
                   />
                 ))
             }
+
+            {sessions.length > 0 && (
+              <>
+                <p style={{ ...s.sectionTitle, marginTop: '2rem' }}>Senaste övningarna</p>
+                {sessions.map(s => {
+                  const pct = Math.round((s.score / s.total) * 100)
+                  const color = pct >= 80 ? '#1D9E75' : pct >= 50 ? '#BA7517' : '#D85A30'
+                  return (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', marginBottom: '8px' }}>
+                      <div>
+                        <p style={{ fontWeight: 500, fontSize: '14px', margin: 0, color: 'var(--text-primary)' }}>{s.materials?.subject ?? '—'}</p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                          {new Date(s.created_at).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontWeight: 700, fontSize: '16px', color }}>{s.score}/{s.total}</span>
+                        <p style={{ fontSize: '11px', color, margin: '1px 0 0' }}>{pct}%</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </>
         )}
 

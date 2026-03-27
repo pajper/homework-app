@@ -15,7 +15,7 @@ async function pdfToBase64(file) {
 }
 
 const s = {
-  page: { minHeight:'100vh', background:'var(--bg)', padding:'2rem 1.5rem' },
+  page: { minHeight:'100vh', background:'var(--bg)', padding:'1.5rem 1rem' },
   wrap: { maxWidth:'600px', margin:'0 auto' },
   back: { background:'transparent', border:'none', color:'var(--text-secondary)', fontSize:'14px', cursor:'pointer', marginBottom:'1.5rem', display:'flex', alignItems:'center', gap:'6px', padding:0 },
   title: { fontFamily:'var(--font-display)', fontSize:'1.75rem', fontWeight:300, marginBottom:'2rem' },

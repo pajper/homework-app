@@ -52,3 +52,8 @@ input, textarea, select { font-family: var(--font-body); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* Mobile */
+@media (max-width: 600px) {
+  input, textarea, select { font-size: 16px !important; } /* prevent iOS zoom */
+}
