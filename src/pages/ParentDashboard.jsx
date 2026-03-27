@@ -66,10 +66,14 @@ export default function ParentDashboard() {
 
   async function init() {
     if (!profile) return
-    const fam = await ensureFamily()
-    if (fam) {
-      setFamily(fam)
-      await fetchChildren(fam.id)
+    try {
+      const fam = await ensureFamily()
+      if (fam) {
+        setFamily(fam)
+        await fetchChildren(fam.id)
+      }
+    } catch (e) {
+      console.error('init error:', e)
     }
     setLoading(false)
   }
