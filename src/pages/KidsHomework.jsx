@@ -2,34 +2,31 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useChildAuth } from '../context/ChildAuthContext'
-import HomeworkCard from '../components/HomeworkCard'
 
-const s = {
-  page: { minHeight: '100vh', background: 'var(--bg)', padding: '2rem 1.5rem' },
-  wrap: { maxWidth: '700px', margin: '0 auto' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' },
-  title: { fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 300, color: 'var(--text-primary)', margin: 0 },
-  logoutBtn: { background: 'transparent', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', padding: '6px 14px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-secondary)' },
-  sectionTitle: { fontSize: '13px', fontWeight: 500, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '2rem 0 12px' },
-  exerciseCard: { background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', marginBottom: '10px' },
-  question: { fontSize: '16px', fontWeight: 500, marginBottom: '1rem', lineHeight: 1.5 },
-  options: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' },
-  option: (selected, correct, revealed) => ({
-    padding: '12px 14px', borderRadius: 'var(--radius-md)', fontSize: '15px', cursor: revealed ? 'default' : 'pointer', border: '0.5px solid',
-    borderColor: !selected && !revealed ? 'var(--border-strong)' : revealed && correct ? 'var(--ok)' : revealed && selected && !correct ? 'var(--urgent)' : 'var(--border-strong)',
-    background: !selected && !revealed ? 'transparent' : revealed && correct ? 'var(--ok-light)' : revealed && selected && !correct ? 'var(--urgent-light)' : selected ? 'var(--accent-light)' : 'transparent',
-    color: revealed && correct ? 'var(--ok-text)' : revealed && selected && !correct ? 'var(--urgent-text)' : 'var(--text-primary)',
-    transition: 'all .15s',
-  }),
-  openInput: { width: '100%', padding: '10px 12px', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: '15px', outline: 'none', background: 'var(--surface)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', resize: 'none' },
-  revealBtn: { padding: '8px 16px', border: '0.5px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: '13px', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' },
-  answer: (correct) => ({ marginTop: '10px', padding: '10px 12px', borderRadius: 'var(--radius-md)', fontSize: '13px', background: correct ? 'var(--ok-light)' : 'var(--exam-light)', color: correct ? 'var(--ok-text)' : 'var(--exam-text)' }),
-  genBtn: { padding: '12px 24px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '15px', fontWeight: 500, cursor: 'pointer' },
-  genWrap: { textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)' },
-  genSub: { fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '1.5rem' },
-  badge: { display: 'inline-block', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '20px', background: 'var(--accent-light)', color: 'var(--accent-text)', marginLeft: '8px', verticalAlign: 'middle' },
-  loading: { textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' },
-  clickable: { marginBottom: '8px', cursor: 'pointer' },
+const SUBJECT_EMOJIS = {
+  matematik: '🔢', matte: '🔢',
+  svenska: '📚',
+  engelska: '🌍',
+  historia: '🏛️',
+  geografi: '🗺️',
+  biologi: '🌿', bio: '🌿',
+  kemi: '⚗️',
+  fysik: '⚡',
+  musik: '🎵',
+  idrott: '⚽',
+  teknik: '🔧',
+  so: '🌏',
+  no: '🔬',
+}
+
+const CARD_COLORS = ['#534AB7', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#BA7517']
+
+function getEmoji(subject) {
+  const lower = subject?.toLowerCase() ?? ''
+  for (const [key, emoji] of Object.entries(SUBJECT_EMOJIS)) {
+    if (lower.includes(key)) return emoji
+  }
+  return '📖'
 }
 
 const norm = (s) => s?.toLowerCase().trim()
@@ -60,7 +57,7 @@ Facit: ${correctAnswer}`,
   return data.content[0].text
 }
 
-function ExerciseItem({ exercise }) {
+function ExerciseItem({ exercise, index, total, onAnswer }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
   const [openAnswer, setOpenAnswer] = useState('')
@@ -70,6 +67,11 @@ function ExerciseItem({ exercise }) {
   const isCorrect = (exercise.type === 'multiple_choice' || exercise.type === 'true_false')
     ? norm(selected) === norm(exercise.correct_answer)
     : null
+
+  function handleReveal() {
+    setRevealed(true)
+    if (isCorrect !== null) onAnswer(isCorrect)
+  }
 
   async function handleAskAI() {
     setLoadingAI(true)
@@ -83,54 +85,119 @@ function ExerciseItem({ exercise }) {
   }
 
   return (
-    <div style={s.exerciseCard}>
-      <p style={s.question}>{exercise.question}</p>
+    <div style={{
+      background: '#fff',
+      borderRadius: '20px',
+      padding: '1.5rem',
+      marginBottom: '12px',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+      border: revealed
+        ? isCorrect === true ? '2px solid #22C55E'
+        : isCorrect === false ? '2px solid #EF4444'
+        : '2px solid transparent'
+        : '2px solid transparent',
+      transition: 'border-color .3s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: '#9E9B94', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Fråga {index + 1} av {total}
+        </span>
+        {revealed && isCorrect === true && <span style={{ fontSize: '20px' }}>⭐</span>}
+        {revealed && isCorrect === false && <span style={{ fontSize: '20px' }}>💪</span>}
+      </div>
+
+      <p style={{ fontSize: '17px', fontWeight: 600, lineHeight: 1.5, marginBottom: '1.25rem', color: '#1A1916' }}>
+        {exercise.question}
+      </p>
 
       {exercise.type === 'multiple_choice' && exercise.options && (
-        <div style={s.options}>
-          {exercise.options.map(opt => (
-            <button key={opt} style={s.option(selected === opt, norm(opt) === norm(exercise.correct_answer), revealed)} onClick={() => !revealed && setSelected(opt)}>
-              {opt}
-            </button>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '1rem' }}>
+          {exercise.options.map(opt => {
+            const isThis = norm(opt) === norm(exercise.correct_answer)
+            const isSelected = selected === opt
+            let bg = '#F8F6F1', border = '#E5E2DC', color = '#1A1916'
+            if (revealed && isThis) { bg = '#DCFCE7'; border = '#22C55E'; color = '#15803D' }
+            else if (revealed && isSelected && !isThis) { bg = '#FEE2E2'; border = '#EF4444'; color = '#B91C1C' }
+            else if (!revealed && isSelected) { bg = '#EEEDFE'; border = '#534AB7'; color = '#3C3489' }
+            return (
+              <button key={opt} onClick={() => !revealed && setSelected(opt)} style={{
+                padding: '14px 16px', borderRadius: '14px', fontSize: '15px', fontWeight: 500,
+                border: `2px solid ${border}`, background: bg, color, cursor: revealed ? 'default' : 'pointer',
+                textAlign: 'left', transition: 'all .15s',
+              }}>
+                {revealed && isThis && '✓ '}{revealed && isSelected && !isThis && '✗ '}{opt}
+              </button>
+            )
+          })}
         </div>
       )}
 
       {exercise.type === 'true_false' && (
-        <div style={{ ...s.options, gridTemplateColumns: '1fr 1fr', maxWidth: '240px' }}>
-          {['Sant', 'Falskt'].map(opt => (
-            <button key={opt} style={s.option(selected === opt, norm(opt) === norm(exercise.correct_answer), revealed)} onClick={() => !revealed && setSelected(opt)}>
-              {opt}
-            </button>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '1rem' }}>
+          {['Sant', 'Falskt'].map(opt => {
+            const isThis = norm(opt) === norm(exercise.correct_answer)
+            const isSelected = selected === opt
+            let bg = '#F8F6F1', border = '#E5E2DC', color = '#1A1916'
+            if (revealed && isThis) { bg = '#DCFCE7'; border = '#22C55E'; color = '#15803D' }
+            else if (revealed && isSelected && !isThis) { bg = '#FEE2E2'; border = '#EF4444'; color = '#B91C1C' }
+            else if (!revealed && isSelected) { bg = '#EEEDFE'; border = '#534AB7'; color = '#3C3489' }
+            return (
+              <button key={opt} onClick={() => !revealed && setSelected(opt)} style={{
+                padding: '14px 16px', borderRadius: '14px', fontSize: '16px', fontWeight: 600,
+                border: `2px solid ${border}`, background: bg, color, cursor: revealed ? 'default' : 'pointer',
+                transition: 'all .15s',
+              }}>
+                {opt === 'Sant' ? '✅ ' : '❌ '}{opt}
+              </button>
+            )
+          })}
         </div>
       )}
 
       {exercise.type === 'open' && (
-        <textarea style={s.openInput} rows={3} value={openAnswer} onChange={e => setOpenAnswer(e.target.value)} placeholder="Skriv ditt svar här..." disabled={revealed} />
+        <textarea style={{
+          width: '100%', padding: '12px 14px', border: '2px solid #E5E2DC', borderRadius: '14px',
+          fontSize: '15px', outline: 'none', background: revealed ? '#F8F6F1' : '#fff',
+          color: '#1A1916', fontFamily: 'var(--font-body)', resize: 'none', marginBottom: '12px',
+        }} rows={3} value={openAnswer} onChange={e => setOpenAnswer(e.target.value)}
+          placeholder="Skriv ditt svar här..." disabled={revealed} />
       )}
 
       {!revealed && (selected || exercise.type === 'open') && (
-        <button style={s.revealBtn} onClick={() => setRevealed(true)}>Visa svar</button>
+        <button onClick={handleReveal} style={{
+          padding: '12px 24px', borderRadius: '14px', fontSize: '15px', fontWeight: 600,
+          background: '#534AB7', color: '#fff', border: 'none', cursor: 'pointer',
+        }}>
+          Visa svar
+        </button>
       )}
 
       {revealed && exercise.type !== 'open' && (
-        <div style={s.answer(isCorrect)}>
-          {isCorrect ? '✓ Rätt!' : `✗ Rätt svar: ${exercise.correct_answer}`}
+        <div style={{
+          marginTop: '8px', padding: '12px 16px', borderRadius: '14px', fontSize: '15px', fontWeight: 600,
+          background: isCorrect ? '#DCFCE7' : '#FEE2E2',
+          color: isCorrect ? '#15803D' : '#B91C1C',
+        }}>
+          {isCorrect ? '🎉 Rätt svar!' : `Rätt svar: ${exercise.correct_answer}`}
         </div>
       )}
 
       {revealed && exercise.type === 'open' && (
         <>
-          <div style={s.answer(null)}>Facit: {exercise.correct_answer}</div>
+          <div style={{ padding: '12px 16px', borderRadius: '14px', fontSize: '14px', background: '#F8F6F1', color: '#6B6860', marginBottom: '8px' }}>
+            <strong>Facit:</strong> {exercise.correct_answer}
+          </div>
           {!aiFeedback && (
-            <button onClick={handleAskAI} disabled={loadingAI} style={{ ...s.revealBtn, marginTop: '8px', fontSize: '12px' }}>
-              {loadingAI ? 'Frågar AI...' : 'Fråga AI om mitt svar'}
+            <button onClick={handleAskAI} disabled={loadingAI} style={{
+              padding: '10px 18px', borderRadius: '14px', fontSize: '13px', fontWeight: 500,
+              background: '#EEEDFE', color: '#3C3489', border: 'none', cursor: 'pointer',
+            }}>
+              {loadingAI ? '🤔 Tänker...' : '🤖 Fråga AI om mitt svar'}
             </button>
           )}
           {aiFeedback && (
-            <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent-light)', color: 'var(--accent-text)', fontSize: '13px', lineHeight: 1.6 }}>
-              {aiFeedback}
+            <div style={{ padding: '12px 16px', borderRadius: '14px', background: '#EEEDFE', color: '#3C3489', fontSize: '14px', lineHeight: 1.6 }}>
+              🤖 {aiFeedback}
             </div>
           )}
         </>
@@ -186,6 +253,7 @@ export default function KidsHomework() {
   const [generating, setGenerating] = useState(false)
   const [loadingExercises, setLoadingExercises] = useState(false)
   const [questionCount, setQuestionCount] = useState(15)
+  const [score, setScore] = useState({ correct: 0, answered: 0 })
 
   useEffect(() => { fetchMaterials() }, [childId])
 
@@ -196,14 +264,20 @@ export default function KidsHomework() {
 
   async function fetchExercises(matId) {
     setLoadingExercises(true)
+    setScore({ correct: 0, answered: 0 })
     const { data } = await supabase.from('exercises').select('*').eq('material_id', matId)
     setExercises(data ?? [])
     setLoadingExercises(false)
   }
 
+  function handleAnswer(isCorrect) {
+    setScore(s => ({ correct: s.correct + (isCorrect ? 1 : 0), answered: s.answered + 1 }))
+  }
+
   async function generateExercises() {
     if (!selectedMaterial) return
     setGenerating(true)
+    setScore({ correct: 0, answered: 0 })
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -216,10 +290,7 @@ export default function KidsHomework() {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
-          messages: [{
-            role: 'user',
-            content: buildClaudeContent(selectedMaterial, questionCount),
-          }],
+          messages: [{ role: 'user', content: buildClaudeContent(selectedMaterial, questionCount) }],
         }),
       })
       const data = await response.json()
@@ -241,51 +312,148 @@ export default function KidsHomework() {
     navigate('/kids')
   }
 
+  function selectMaterial(m) {
+    setSelectedMaterial(m)
+    fetchExercises(m.id)
+    setTimeout(() => {
+      document.getElementById('exercises-section')?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+  }
+
   return (
-    <div style={s.page}>
-      <div style={s.wrap}>
-        <div style={s.header}>
-          <h1 style={s.title}>Hej {childUser?.name ?? ''}!</h1>
-          <button style={s.logoutBtn} onClick={handleLogout}>Byt användare</button>
+    <div style={{ minHeight: '100vh', background: '#F0EEF8', fontFamily: 'var(--font-body)' }}>
+
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg, #534AB7 0%, #7C6FD4 100%)', padding: '1.5rem 1.5rem 3rem', color: '#fff' }}>
+        <div style={{ maxWidth: '700px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ fontSize: '14px', opacity: 0.75, marginBottom: '2px' }}>Hej!</p>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 400, margin: 0 }}>
+              {childUser?.name} ✨
+            </h1>
+          </div>
+          {score.answered > 0 && (
+            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.2)', borderRadius: '16px', padding: '10px 16px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 700 }}>{score.correct}/{score.answered}</div>
+              <div style={{ fontSize: '12px', opacity: 0.85 }}>rätt</div>
+            </div>
+          )}
+          <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '12px', padding: '8px 14px', fontSize: '13px', color: '#fff', cursor: 'pointer' }}>
+            Byt användare
+          </button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '700px', margin: '-1.5rem auto 0', padding: '0 1.5rem 3rem' }}>
+
+        {/* Homework cards */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          {materials.length === 0 ? (
+            <div style={{ background: '#fff', borderRadius: '20px', padding: '2rem', textAlign: 'center', color: '#9E9B94' }}>
+              Inga läxor ännu!
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+              {materials.map((m, i) => {
+                const color = CARD_COLORS[i % CARD_COLORS.length]
+                const isSelected = selectedMaterial?.id === m.id
+                return (
+                  <div key={m.id} onClick={() => selectMaterial(m)} style={{
+                    background: isSelected ? color : '#fff',
+                    borderRadius: '20px',
+                    padding: '1.25rem',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? `0 4px 20px ${color}44` : '0 2px 8px rgba(0,0,0,0.06)',
+                    border: `2px solid ${isSelected ? color : 'transparent'}`,
+                    transition: 'all .2s',
+                  }}>
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>{getEmoji(m.subject)}</div>
+                    <p style={{ fontWeight: 600, fontSize: '15px', color: isSelected ? '#fff' : '#1A1916', margin: 0 }}>{m.subject}</p>
+                    {m.due_date && (
+                      <p style={{ fontSize: '12px', color: isSelected ? 'rgba(255,255,255,0.75)' : '#9E9B94', margin: '4px 0 0' }}>
+                        {new Date(m.due_date).toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        <p style={s.sectionTitle}>Mina läxor</p>
-        {materials.length === 0
-          ? <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Inga läxor ännu!</div>
-          : materials.map(m => (
-            <div key={m.id} style={s.clickable} onClick={() => { setSelectedMaterial(m); fetchExercises(m.id) }}>
-              <HomeworkCard material={m} />
-            </div>
-          ))
-        }
-
+        {/* Exercises section */}
         {selectedMaterial && (
-          <>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px', margin:'2rem 0 12px' }}>
-              <p style={{ ...s.sectionTitle, margin:0 }}>
-                Övningar — {selectedMaterial.subject}
-                {exercises.length > 0 && <span style={s.badge}>{exercises.length} st</span>}
-              </p>
-              <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+          <div id="exercises-section">
+            {/* Section header */}
+            <div style={{ background: '#fff', borderRadius: '20px', padding: '1rem 1.25rem', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '24px' }}>{getEmoji(selectedMaterial.subject)}</span>
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: '15px', margin: 0 }}>{selectedMaterial.subject}</p>
+                  {exercises.length > 0 && (
+                    <p style={{ fontSize: '12px', color: '#9E9B94', margin: 0 }}>{exercises.length} övningar</p>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 {[5, 10, 15, 20].map(n => (
-                  <button key={n} onClick={() => setQuestionCount(n)} style={{ padding:'4px 10px', borderRadius:'var(--radius-md)', border:'0.5px solid var(--border-strong)', background: questionCount === n ? 'var(--accent)' : 'transparent', color: questionCount === n ? '#fff' : 'var(--text-secondary)', fontSize:'12px', cursor:'pointer' }}>{n}</button>
+                  <button key={n} onClick={() => setQuestionCount(n)} style={{
+                    padding: '4px 10px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                    background: questionCount === n ? '#534AB7' : '#F0EEF8',
+                    color: questionCount === n ? '#fff' : '#6B6860',
+                  }}>{n}</button>
                 ))}
-                <button style={s.revealBtn} onClick={generateExercises} disabled={generating}>
-                  {generating ? 'Genererar...' : exercises.length === 0 ? 'Generera övningar' : 'Generera nya'}
+                <button onClick={generateExercises} disabled={generating} style={{
+                  padding: '8px 16px', borderRadius: '20px', border: 'none', fontSize: '13px', fontWeight: 600,
+                  background: '#534AB7', color: '#fff', cursor: generating ? 'default' : 'pointer', opacity: generating ? 0.7 : 1,
+                }}>
+                  {generating ? '⏳ Genererar...' : exercises.length === 0 ? '✨ Generera' : '🔄 Nya frågor'}
                 </button>
               </div>
             </div>
 
+            {/* Progress bar */}
+            {exercises.length > 0 && score.answered > 0 && (
+              <div style={{ background: '#fff', borderRadius: '16px', padding: '12px 16px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9E9B94', marginBottom: '6px' }}>
+                  <span>Framsteg</span>
+                  <span>{score.answered} av {exercises.length} besvarade · {score.correct} rätt</span>
+                </div>
+                <div style={{ height: '8px', background: '#F0EEF8', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(score.answered / exercises.length) * 100}%`, background: 'linear-gradient(90deg, #534AB7, #7C6FD4)', borderRadius: '4px', transition: 'width .3s' }} />
+                </div>
+              </div>
+            )}
+
             {loadingExercises ? (
-              <div style={s.loading}>Hämtar övningar...</div>
+              <div style={{ textAlign: 'center', padding: '3rem', color: '#9E9B94', background: '#fff', borderRadius: '20px' }}>
+                Hämtar övningar...
+              </div>
             ) : exercises.length === 0 ? (
-              <div style={s.genWrap}>
-                <p style={s.genSub}>Inga övningar ännu — klicka "Generera övningar" ovan!</p>
+              <div style={{ textAlign: 'center', padding: '3rem', background: '#fff', borderRadius: '20px' }}>
+                <p style={{ fontSize: '40px', marginBottom: '8px' }}>🎯</p>
+                <p style={{ color: '#9E9B94', fontSize: '14px' }}>Klicka "Generera" för att skapa övningar!</p>
               </div>
             ) : (
-              exercises.map(ex => <ExerciseItem key={ex.id} exercise={ex} />)
+              exercises.map((ex, i) => (
+                <ExerciseItem key={ex.id} exercise={ex} index={i} total={exercises.length} onAnswer={handleAnswer} />
+              ))
             )}
-          </>
+
+            {score.answered === exercises.length && exercises.length > 0 && (
+              <div style={{ textAlign: 'center', padding: '2rem', background: '#fff', borderRadius: '20px', marginTop: '12px' }}>
+                <p style={{ fontSize: '48px', marginBottom: '8px' }}>
+                  {score.correct === exercises.length ? '🏆' : score.correct >= exercises.length / 2 ? '🌟' : '💪'}
+                </p>
+                <p style={{ fontWeight: 700, fontSize: '20px', marginBottom: '4px' }}>
+                  {score.correct} av {exercises.length} rätt!
+                </p>
+                <p style={{ color: '#9E9B94', fontSize: '14px' }}>
+                  {score.correct === exercises.length ? 'Perfekt! Fantastiskt jobbat!' : score.correct >= exercises.length / 2 ? 'Bra jobbat! Fortsätt öva!' : 'Bra försök! Öva lite till!'}
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
