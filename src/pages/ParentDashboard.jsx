@@ -61,7 +61,11 @@ export default function ParentDashboard() {
   }
 
   async function fetchMaterials(childId) {
-    const { data } = await supabase.from('materials').select('*').eq('child_id', childId).order('due_date', { ascending: true, nullsFirst: false })
+    const { data } = await supabase
+      .from('materials')
+      .select('*, exercises(count)')
+      .eq('child_id', childId)
+      .order('due_date', { ascending: true, nullsFirst: false })
     setMaterials(data ?? [])
   }
 
@@ -159,6 +163,7 @@ export default function ParentDashboard() {
                     material={m}
                     onDelete={deleteMaterial}
                     onGenerate={generateExercises}
+                    hasExercises={(m.exercises?.[0]?.count ?? 0) > 0}
                   />
                 ))
             }

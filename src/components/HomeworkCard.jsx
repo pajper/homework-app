@@ -31,7 +31,7 @@ const COLORS = {
 
 const LABELS = { urgent: 'Snart inlämning', exam: 'Prov nära', ok: 'God tid' }
 
-export default function HomeworkCard({ material, onEdit, onDelete, onGenerate }) {
+export default function HomeworkCard({ material, onEdit, onDelete, onGenerate, hasExercises }) {
   const status = getStatus(material)
   const c = COLORS[status]
   const dueIn = getDaysUntil(material.due_date)
@@ -60,8 +60,8 @@ export default function HomeworkCard({ material, onEdit, onDelete, onGenerate })
         </div>
         <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
           {onGenerate && (
-            <button onClick={() => onGenerate(material)} style={{ fontSize:'12px', padding:'4px 10px', border:'0.5px solid var(--accent)', color:'var(--accent)', background:'transparent', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
-              Generera övningar
+            <button onClick={() => onGenerate(material)} style={{ fontSize:'12px', padding:'4px 10px', border:'0.5px solid var(--accent)', color:'var(--accent)', background: hasExercises ? 'var(--accent)' : 'transparent', color: hasExercises ? '#fff' : 'var(--accent)', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
+              {hasExercises ? 'Visa övningar' : 'Generera övningar'}
             </button>
           )}
           {onEdit && <button onClick={() => onEdit(material)} style={{ fontSize:'12px', padding:'4px 8px', border:'0.5px solid var(--border-strong)', color:'var(--text-secondary)', background:'transparent', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>Redigera</button>}

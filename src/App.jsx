@@ -33,7 +33,11 @@ export default function App() {
 
       <Route path="/" element={
         <ProtectedRoute>
-          {profile?.role === 'parent' ? <ParentDashboard /> : <Navigate to="/kids" replace />}
+          {!profile
+            ? <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontFamily:'var(--font-display)', color:'var(--text-secondary)' }}>Laddar...</div>
+            : profile.role === 'parent'
+              ? <ParentDashboard />
+              : <Navigate to="/kids" replace />}
         </ProtectedRoute>
       } />
 

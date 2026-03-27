@@ -63,12 +63,13 @@ export default function UploadMaterial() {
     if (!subject.trim()) { setError('Ange ett ämne'); return }
     if (inputType === 'text' && !textContent.trim()) { setError('Lägg till läxinnehåll'); return }
     if (inputType === 'pdf' && !file) { setError('Välj en PDF-fil'); return }
+    if (inputType === 'math' && !textContent.trim()) { setError('Beskriv vad som ska övas'); return }
 
     setLoading(true)
     setError(null)
 
     let filePath = null
-    let content = textContent
+    let content = inputType === 'math' ? `__MATH__:${textContent.trim()}` : textContent
 
     if (inputType === 'pdf' && file) {
       if (file.size > 4 * 1024 * 1024) {
@@ -115,19 +116,32 @@ export default function UploadMaterial() {
     if (newMaterial) {
       setLoadingMsg('Genererar övningar...')
       try {
+        const isMath = content.startsWith('__MATH__:')
         const isPdf = content.startsWith('__PDF_BASE64__:')
-        const prompt = `Skapa 15 övningsfrågor på svenska för ämnet: ${subject.trim()}.
+        const SUFFIX = `\n\nSvara ENDAST med ett JSON-array, inga förklaringar:\n[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy"}]\n\nType kan vara: multiple_choice, open, true_false\nFör true_false: options ska vara ["Sant","Falskt"]\nFör open: options ska vara null`
+
+        let messageContent
+        if (isMath) {
+          const topic = content.slice('__MATH__:'.length)
+          messageContent = `Skapa 15 matematikuppgifter på svenska för en elev som ska öva på: ${topic}
+
+Regler:
+- Skapa verkliga beräkningsuppgifter med specifika tal, inte frågor om teorin
+- Blanda svårighetsgrad från lätt till svår
+- Använd "multiple_choice" för kortare beräkningar (ge 4 rimliga svarsalternativ där ett är rätt)
+- Använd "open" för flerstegsproblem eller textuppgifter
+- correct_answer ska alltid vara det exakta svaret (t.ex. "312" eller "3/4")
 
 Svara ENDAST med ett JSON-array, inga förklaringar:
-[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A","difficulty":"easy"}]
-
-Type kan vara: multiple_choice, open, true_false
-För true_false: options ska vara ["Sant","Falskt"]
-För open: options ska vara null`
-
-        const messageContent = isPdf
-          ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.slice('__PDF_BASE64__:'.length) } }, { type: 'text', text: prompt }]
-          : `Skapa 15 övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${subject.trim()}\nMaterial: ${content}\n\n${prompt}`
+[{"question":"Beräkna: 24 × 13 =","type":"multiple_choice","options":["312","252","324","288"],"correct_answer":"312","difficulty":"medium"}]`
+        } else if (isPdf) {
+          messageContent = [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.slice('__PDF_BASE64__:'.length) } },
+            { type: 'text', text: `Skapa 15 övningsfrågor på svenska för ämnet: ${subject.trim()}.${SUFFIX}` },
+          ]
+        } else {
+          messageContent = `Skapa 15 övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${subject.trim()}\nMaterial: ${content}${SUFFIX}`
+        }
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -178,11 +192,19 @@ För open: options ska vara null`
 
           <label style={s.label}>Material</label>
           <div style={s.tabs}>
-            <button style={s.tab(inputType==='text')} onClick={() => setInputType('text')}>Textinmatning</button>
+            <button style={s.tab(inputType==='text')} onClick={() => setInputType('text')}>Text</button>
             <button style={s.tab(inputType==='pdf')} onClick={() => setInputType('pdf')}>PDF</button>
+            <button style={s.tab(inputType==='math')} onClick={() => setInputType('math')}>Matematik</button>
           </div>
 
-          {inputType === 'text' ? (
+          {inputType === 'math' ? (
+            <>
+              <div style={{ padding:'10px 12px', borderRadius:'var(--radius-md)', background:'var(--accent-light)', color:'var(--accent-text)', fontSize:'13px', marginBottom:'1rem' }}>
+                AI genererar räkneuppgifter baserat på din beskrivning — ingen källtext behövs.
+              </div>
+              <textarea style={s.textarea} value={textContent} onChange={e => setTextContent(e.target.value)} placeholder="Beskriv vad som ska övas, t.ex:&#10;Multiplikation med 2–3-siffriga tal&#10;Addition och subtraktion med negativa tal&#10;Bråk: addition och subtraktion med olika nämnare" />
+            </>
+          ) : inputType === 'text' ? (
             <textarea style={s.textarea} value={textContent} onChange={e => setTextContent(e.target.value)} placeholder="Klistra in läxinnehållet här — text från boken, uppgifter, glosor, etc." />
           ) : (
             file

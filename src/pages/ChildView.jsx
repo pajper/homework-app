@@ -208,7 +208,24 @@ För true_false: options ska vara ["Sant","Falskt"]
 För open: options ska vara null`
 
 function buildClaudeContent(material, count) {
+  const isMath = material.content?.startsWith('__MATH__:')
   const isPdf = material.content?.startsWith('__PDF_BASE64__:')
+
+  if (isMath) {
+    const topic = material.content.slice('__MATH__:'.length)
+    return `Skapa ${count} matematikuppgifter på svenska för en elev som ska öva på: ${topic}
+
+Regler:
+- Skapa verkliga beräkningsuppgifter med specifika tal, inte frågor om teorin
+- Blanda svårighetsgrad från lätt till svår
+- Använd "multiple_choice" för kortare beräkningar (ge 4 rimliga svarsalternativ där ett är rätt)
+- Använd "open" för flerstegsproblem eller textuppgifter
+- correct_answer ska alltid vara det exakta svaret (t.ex. "312" eller "3/4")
+
+Svara ENDAST med ett JSON-array, inga förklaringar:
+[{"question":"Beräkna: 24 × 13 =","type":"multiple_choice","options":["312","252","324","288"],"correct_answer":"312","difficulty":"medium"}]`
+  }
+
   const prompt = `Skapa ${count} övningsfrågor på svenska för ämnet: ${material.subject}.${PROMPT_SUFFIX}`
   if (isPdf) {
     return [
