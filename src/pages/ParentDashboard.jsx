@@ -86,30 +86,43 @@ export default function ParentDashboard() {
       .eq('id', profile.id)
       .single()
 
+    let fam = null
+
     if (parentProfile?.family_id) {
-      const { data: fam } = await supabase
+      const { data } = await supabase
         .from('families')
         .select('*')
         .eq('id', parentProfile.family_id)
         .single()
-      return fam
+      fam = data
+    } else {
+      // Create a new family
+      const { data: newFamily, error } = await supabase
+        .from('families')
+        .insert({})
+        .select()
+        .single()
+
+      if (error || !newFamily) { console.error('Kunde inte skapa familj:', error); return null }
+
+      await supabase
+        .from('profiles')
+        .update({ family_id: newFamily.id })
+        .eq('id', profile.id)
+
+      fam = newFamily
     }
 
-    // Create a new family
-    const { data: newFamily, error } = await supabase
-      .from('families')
-      .insert({})
-      .select()
-      .single()
+    // Backfill: sätt family_id på befintliga barn som saknar det
+    if (fam) {
+      await supabase
+        .from('profiles')
+        .update({ family_id: fam.id })
+        .eq('parent_id', profile.id)
+        .is('family_id', null)
+    }
 
-    if (error || !newFamily) { console.error('Kunde inte skapa familj:', error); return null }
-
-    await supabase
-      .from('profiles')
-      .update({ family_id: newFamily.id })
-      .eq('id', profile.id)
-
-    return newFamily
+    return fam
   }
 
   async function fetchChildren(familyId) {
