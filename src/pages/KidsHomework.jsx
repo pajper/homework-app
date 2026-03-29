@@ -291,13 +291,19 @@ Svara ENDAST med ett JSON-array, inga förklaringar:
 [{"question":"Beräkna: 24 × 13 =","type":"multiple_choice","options":["312","252","324","288"],"correct_answer":"312","difficulty":"medium"}]`
   }
 
-  const prompt = `Skapa ${count} övningsfrågor på svenska för ämnet: ${material.subject}.${difficultyNote}${PROMPT_SUFFIX}`
   if (isPdf) {
+    const pdfPrompt = `Läs igenom hela PDF-dokumentet noggrant från början till slut, inklusive alla fördjupningsavsnitt, faktarutor och extrainfo som finns.
+
+Skapa ${count} övningsfrågor på svenska baserat på HELA innehållet i dokumentet. Ämne: ${material.subject}.
+${harder ? '- Fokusera på svåra och komplexa frågor, gärna från fördjupningsavsnitten.' : '- Blanda enkla och svåra frågor från hela dokumentet.'}
+- Inkludera frågor från både grundinnehållet och eventuella fördjupningsdelar.${PROMPT_SUFFIX}`
     return [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: material.content.slice('__PDF_BASE64__:'.length) } },
-      { type: 'text', text: prompt },
+      { type: 'text', text: pdfPrompt },
     ]
   }
+
+  const prompt = `Skapa ${count} övningsfrågor på svenska för ämnet: ${material.subject}.${difficultyNote}${PROMPT_SUFFIX}`
   return `Skapa ${count} övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${material.subject}\nMaterial: ${material.content}${difficultyNote}${PROMPT_SUFFIX}`
 }
 
@@ -545,6 +551,14 @@ export default function KidsHomework() {
                   }}>
                     {generating ? '⏳' : exercises.length === 0 ? '✨ Generera' : '🔄 Nya'}
                   </button>
+                  {exercises.length > 0 && (
+                    <button onClick={() => generateExercises(true)} disabled={generating} style={{
+                      padding: '7px 14px', borderRadius: '20px', border: 'none', fontSize: '13px', fontWeight: 600,
+                      background: 'linear-gradient(135deg, #D85A30, #D4537E)', color: '#fff', cursor: generating ? 'default' : 'pointer', opacity: generating ? 0.7 : 1,
+                    }}>
+                      🔥 Svårare
+                    </button>
+                  )}
                 </div>
               </div>
 
