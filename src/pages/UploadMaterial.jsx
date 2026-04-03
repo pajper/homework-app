@@ -72,8 +72,8 @@ export default function UploadMaterial() {
     let content = inputType === 'math' ? `__MATH__:${textContent.trim()}` : textContent
 
     if (inputType === 'pdf' && file) {
-      if (file.size > 4 * 1024 * 1024) {
-        setError('PDF:en är för stor (max 4 MB). Prova att dela upp den eller kopiera texten manuellt.')
+      if (file.size > 20 * 1024 * 1024) {
+        setError('PDF:en är för stor (max 20 MB).')
         setLoading(false)
         return
       }
@@ -137,7 +137,7 @@ Svara ENDAST med ett JSON-array, inga förklaringar:
         } else if (isPdf) {
           messageContent = [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.slice('__PDF_BASE64__:'.length) } },
-            { type: 'text', text: `Skapa 15 övningsfrågor på svenska för ämnet: ${subject.trim()}.${SUFFIX}` },
+            { type: 'text', text: `Läs igenom hela PDF-dokumentet noggrant från början till slut, inklusive alla fördjupningsavsnitt, faktarutor och extrainfo.\n\nSkapa 15 övningsfrågor på svenska baserat på HELA innehållet. Ämne: ${subject.trim()}. Blanda enkla och svåra frågor från hela dokumentet.${SUFFIX}` },
           ]
         } else {
           messageContent = `Skapa 15 övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${subject.trim()}\nMaterial: ${content}${SUFFIX}`
