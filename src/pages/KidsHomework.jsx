@@ -549,14 +549,14 @@ export default function KidsHomework() {
                     padding: '7px 14px', borderRadius: '20px', border: 'none', fontSize: '13px', fontWeight: 600,
                     background: '#534AB7', color: '#fff', cursor: generating ? 'default' : 'pointer', opacity: generating ? 0.7 : 1,
                   }}>
-                    {generating ? '⏳' : exercises.length === 0 ? '✨ Generera' : '🔄 Nya'}
+                    {generating ? '⏳ Genererar...' : exercises.length === 0 ? '✨ Generera frågor' : '🔄 Nya frågor'}
                   </button>
                   {exercises.length > 0 && (
                     <button onClick={() => generateExercises(true)} disabled={generating} style={{
                       padding: '7px 14px', borderRadius: '20px', border: 'none', fontSize: '13px', fontWeight: 600,
                       background: 'linear-gradient(135deg, #D85A30, #D4537E)', color: '#fff', cursor: generating ? 'default' : 'pointer', opacity: generating ? 0.7 : 1,
                     }}>
-                      🔥 Svårare
+                      🔥 Svårare frågor
                     </button>
                   )}
                 </div>
