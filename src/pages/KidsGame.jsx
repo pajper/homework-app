@@ -7,6 +7,19 @@ const BASE_DURATION = 7000
 const FEEDBACK_MS   = 600
 const OPTION_COLORS = ['#534AB7', '#1D9E75', '#D85A30', '#D4537E']
 
+// Vapen baserat på streak
+const WEAPONS = ['🥥','🥥','🥥','🍌','🍌','🍌','🍍','🍍','🍍','🔥','🔥','🔥']
+function getWeapon(streak) { return WEAPONS[Math.min(streak, WEAPONS.length - 1)] }
+
+// Bakgrundsfärger per level
+const LEVEL_BACKGROUNDS = [
+  'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)',
+  'linear-gradient(160deg,#0A2B1A 0%,#0A1F0F 100%)',
+  'linear-gradient(160deg,#2B1A0A 0%,#1F120A 100%)',
+  'linear-gradient(160deg,#2B0A0A 0%,#1F0F0F 100%)',
+  'linear-gradient(160deg,#1A0A2B 0%,#120A1F 100%)',
+]
+
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5) }
 function norm(s) { return s?.toLowerCase().trim() }
 
@@ -24,25 +37,40 @@ export default function KidsGame() {
   const [score,       setScore]       = useState(0)
   const [streak,      setStreak]      = useState(0)
   const [best,        setBest]        = useState(0)
-  const [lives,        setLives]        = useState(3)
-  const [gameOver,     setGameOver]     = useState(false)
-  const [showCoconut,  setShowCoconut]  = useState(false)
-  const [coconutY,     setCoconutY]     = useState(0)
-  const [coconutMiss,  setCoconutMiss]  = useState(false)
-  const [monkeyHit,    setMonkeyHit]    = useState(false)
+  const [lives,       setLives]       = useState(3)
+  const [level,       setLevel]       = useState(1)
+  const [gameOver,    setGameOver]    = useState(false)
+
+  const [showProjectile, setShowProjectile] = useState(false)
+  const [projectileY,    setProjectileY]    = useState(0)
+  const [projectileMiss, setProjectileMiss] = useState(false)
+  const [projectileType, setProjectileType] = useState('🥥')
+  const [monkeyHit,      setMonkeyHit]      = useState(false)
+
+  const [toast,     setToast]     = useState(null)  // { text, color }
+  const [scorePop,  setScorePop]  = useState(null)  // '+1' '+2' '+3'
 
   const questionsRef  = useRef([])
   const idxRef        = useRef(0)
   const timerRef      = useRef(null)
+  const toastTimer    = useRef(null)
   const durationRef   = useRef(BASE_DURATION)
   const livesRef      = useRef(3)
   const streakRef     = useRef(0)
+  const scoreRef      = useRef(0)
+  const levelRef      = useRef(1)
   const matsRef       = useRef([])
   const generatingRef = useRef(false)
-  const historyRef    = useRef([]) // { question, chosen, correct, result: 'correct'|'wrong'|'missed' }
+  const historyRef    = useRef([])
 
   useEffect(() => { fetchQuestions() }, [childId])
-  useEffect(() => () => clearTimeout(timerRef.current), [])
+  useEffect(() => () => { clearTimeout(timerRef.current); clearTimeout(toastTimer.current) }, [])
+
+  function showToast(text, color = '#fff') {
+    setToast({ text, color })
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 1800)
+  }
 
   async function fetchQuestions() {
     const { data: mats } = await supabase
@@ -68,7 +96,6 @@ export default function KidsGame() {
       const isMath = mat.content?.startsWith('__MATH__:')
       const isPdf  = mat.content?.startsWith('__PDF_BASE64__:')
       const SUFFIX = `\n\nSvara ENDAST med ett JSON-array:\n[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A"}]\nType: multiple_choice eller true_false. För true_false: options=["Sant","Falskt"], correct_answer="Sant" eller "Falskt".`
-
       let msgContent
       if (isMath) {
         msgContent = `Skapa 10 varierade matematikfrågor (multiple_choice) för: ${mat.content.slice('__MATH__:'.length)}${SUFFIX}`
@@ -80,7 +107,6 @@ export default function KidsGame() {
       } else {
         msgContent = `Skapa 10 nya varierade frågor (blanda multiple_choice och true_false) för:\nÄmne: ${mat.subject}\nMaterial: ${mat.content}\nVälj oväntat och varierande aspekter av materialet.${SUFFIX}`
       }
-
       const res    = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -103,42 +129,34 @@ export default function KidsGame() {
     let idx = idxRef.current
     if (idx >= qs.length) { qs = shuffle(qs); questionsRef.current = qs; idx = 0 }
     idxRef.current = idx + 1
-
-    // Generera fler frågor i bakgrunden när halva poolen är använd
     if (idx >= Math.floor(qs.length / 2)) generateMoreQuestions()
 
-    const q = qs[idx]
-
-    setCurrent(q)
+    setCurrent(qs[idx])
     setAnswered(null)
     setMonkeyHit(false)
-    setShowCoconut(false)
-    setCoconutMiss(false)
+    setShowProjectile(false)
+    setProjectileMiss(false)
     setSlideKey(k => k + 1)
 
     timerRef.current = setTimeout(() => {
-      // Character reached bottom — lose a life
       const newLives = livesRef.current - 1
       livesRef.current = newLives
       setLives(newLives)
       streakRef.current = 0
       setStreak(0)
-      durationRef.current = BASE_DURATION
-
+      durationRef.current = Math.max(2500, BASE_DURATION - (levelRef.current - 1) * 500)
       setAnswered('missed')
-      historyRef.current.push({ question: current?.question, chosen: null, correct: current?.correct_answer, result: 'missed' })
-
-      if (newLives <= 0) {
-        setTimeout(() => setGameOver(true), FEEDBACK_MS)
-      } else {
-        setTimeout(showNext, FEEDBACK_MS)
-      }
+      historyRef.current.push({ question: qs[idx]?.question, chosen: null, correct: qs[idx]?.correct_answer, result: 'missed' })
+      if (newLives <= 0) setTimeout(() => setGameOver(true), FEEDBACK_MS)
+      else setTimeout(showNext, FEEDBACK_MS)
     }, durationRef.current)
   }
 
   function startGame() {
     livesRef.current    = 3
     streakRef.current   = 0
+    scoreRef.current    = 0
+    levelRef.current    = 1
     durationRef.current = BASE_DURATION
     idxRef.current      = 0
     historyRef.current  = []
@@ -146,8 +164,22 @@ export default function KidsGame() {
     setScore(0)
     setStreak(0)
     setLives(3)
+    setLevel(1)
     setGameOver(false)
     showNext()
+  }
+
+  function fireProjectile(hit) {
+    const weapon = getWeapon(streakRef.current)
+    setProjectileType(weapon)
+    const monkeyEl = document.querySelector('.char-slide')
+    if (monkeyEl) {
+      const rect = monkeyEl.getBoundingClientRect()
+      setProjectileY(-(window.innerHeight - 160 - (rect.top + rect.height / 2)))
+    }
+    setProjectileMiss(!hit)
+    setShowProjectile(true)
+    if (hit) setTimeout(() => setMonkeyHit(true), 350)
   }
 
   function handleAnswer(opt) {
@@ -160,47 +192,59 @@ export default function KidsGame() {
 
     if (correct) {
       const newStreak = streakRef.current + 1
-      const pts = newStreak >= 6 ? 3 : newStreak >= 3 ? 2 : 1
+      const pts = newStreak >= 10 ? 4 : newStreak >= 6 ? 3 : newStreak >= 3 ? 2 : 1
       streakRef.current = newStreak
       setStreak(newStreak)
-      setScore(s => s + pts)
+      const newScore = scoreRef.current + pts
+      scoreRef.current = newScore
+      setScore(newScore)
       setBest(b => Math.max(b, newStreak))
-      durationRef.current = Math.max(2500, BASE_DURATION - newStreak * 300)
-      // Kasta kokosnöt mot apan
-      const monkeyEl = document.querySelector('.char-slide')
-      if (monkeyEl) {
-        const rect = monkeyEl.getBoundingClientRect()
-        const travel = -(window.innerHeight - 160 - (rect.top + rect.height / 2))
-        setCoconutY(travel)
+      setScorePop(`+${pts}`)
+      setTimeout(() => setScorePop(null), 700)
+
+      // Level up var 15:e poäng
+      const newLevel = Math.floor(newScore / 15) + 1
+      if (newLevel > levelRef.current) {
+        levelRef.current = newLevel
+        setLevel(newLevel)
+        showToast(`⚡ Level ${newLevel}! Snabbare!`, '#FBBF24')
+        durationRef.current = Math.max(2000, BASE_DURATION - (newLevel - 1) * 500 - newStreak * 200)
+      } else {
+        durationRef.current = Math.max(2000, BASE_DURATION - (levelRef.current - 1) * 500 - newStreak * 200)
       }
-      setShowCoconut(true)
-      setTimeout(() => setMonkeyHit(true), 350)
+
+      // Extraliv var 5:e streak
+      if (newStreak > 0 && newStreak % 5 === 0) {
+        const newLives = Math.min(livesRef.current + 1, 5)
+        livesRef.current = newLives
+        setLives(newLives)
+        showToast('❤️ Extraliv!', '#EF4444')
+      } else if (newStreak === 3) {
+        showToast('🍌 Bananläge! ×2', '#FCD34D')
+      } else if (newStreak === 6) {
+        showToast('🍍 Ananas! ×3', '#F97316')
+      } else if (newStreak === 10) {
+        showToast('🔥 ELDKULA! ×4', '#EF4444')
+      }
+
+      fireProjectile(true)
     } else {
       const newLives = livesRef.current - 1
       livesRef.current = newLives
       setLives(newLives)
       streakRef.current = 0
       setStreak(0)
-      durationRef.current = BASE_DURATION
-      // Kasta kokosnöt som skjuter förbi apan med liten vinkel
-      const monkeyEl = document.querySelector('.char-slide')
-      if (monkeyEl) {
-        const rect = monkeyEl.getBoundingClientRect()
-        const travel = -(window.innerHeight - 160 - (rect.top + rect.height / 2))
-        setCoconutY(travel)
-      }
-      setCoconutMiss(true)
-      setShowCoconut(true)
+      durationRef.current = Math.max(2500, BASE_DURATION - (levelRef.current - 1) * 500)
+      fireProjectile(false)
     }
 
-    if (livesRef.current <= 0) {
-      setTimeout(() => setGameOver(true), FEEDBACK_MS)
-    } else {
-      setTimeout(showNext, FEEDBACK_MS)
-    }
+    if (livesRef.current <= 0) setTimeout(() => setGameOver(true), FEEDBACK_MS)
+    else setTimeout(showNext, FEEDBACK_MS)
   }
 
-  const multiplier = streak >= 6 ? 3 : streak >= 3 ? 2 : 1
+  const multiplier = streak >= 10 ? 4 : streak >= 6 ? 3 : streak >= 3 ? 2 : 1
+  const bgGradient = LEVEL_BACKGROUNDS[(level - 1) % LEVEL_BACKGROUNDS.length]
+  const weapon     = getWeapon(streak)
 
   // ── Screens ────────────────────────────────────────────────────
 
@@ -215,47 +259,35 @@ export default function KidsGame() {
   )
 
   if (gameOver) {
-    const hist = historyRef.current
+    const hist     = historyRef.current
     const nCorrect = hist.filter(h => h.result === 'correct').length
     const nWrong   = hist.filter(h => h.result === 'wrong').length
     const nMissed  = hist.filter(h => h.result === 'missed').length
     return (
       <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', fontFamily:'var(--font-body)', overflowY:'auto' }}>
-        {/* Header */}
         <div style={{ padding:'1.5rem 1rem 1rem', textAlign:'center' }}>
           <p style={{ fontSize:'56px', margin:'0 0 0.25rem' }}>💀</p>
           <h2 style={{ fontFamily:'var(--font-display)', fontSize:'2rem', color:'#fff', fontWeight:400, margin:'0 0 0.75rem' }}>Game over!</h2>
-          <div style={{ display:'flex', justifyContent:'center', gap:'16px', marginBottom:'1.25rem' }}>
-            <div style={{ background:'rgba(255,255,255,0.1)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
-              <div style={{ fontSize:'22px', fontWeight:700, color:'#fff' }}>⭐ {score}</div>
-              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>poäng</div>
-            </div>
-            <div style={{ background:'rgba(34,197,94,0.2)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
-              <div style={{ fontSize:'22px', fontWeight:700, color:'#22C55E' }}>✅ {nCorrect}</div>
-              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>rätt</div>
-            </div>
-            <div style={{ background:'rgba(239,68,68,0.2)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
-              <div style={{ fontSize:'22px', fontWeight:700, color:'#EF4444' }}>❌ {nWrong + nMissed}</div>
-              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>fel/missad</div>
-            </div>
+          {best >= 5 && <p style={{ color:'#FBBF24', fontSize:'13px', marginBottom:'0.5rem' }}>🏅 Bästa streak: {best} i rad!</p>}
+          <div style={{ display:'flex', justifyContent:'center', gap:'12px', marginBottom:'1.25rem', flexWrap:'wrap' }}>
+            {[['⭐', score, 'poäng', '#fff'], ['⚡', level, 'level', '#FBBF24'], ['✅', nCorrect, 'rätt', '#22C55E'], ['❌', nWrong + nMissed, 'fel/missad', '#EF4444']].map(([icon, val, label, color]) => (
+              <div key={label} style={{ background:'rgba(255,255,255,0.08)', borderRadius:'14px', padding:'10px 16px', textAlign:'center' }}>
+                <div style={{ fontSize:'20px', fontWeight:700, color }}>{icon} {val}</div>
+                <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>{label}</div>
+              </div>
+            ))}
           </div>
           <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
             <button onClick={startGame} style={primaryBtn}>Spela igen</button>
             <button onClick={() => navigate(`/kids/${childId}`)} style={ghostBtn}>← Läxor</button>
           </div>
         </div>
-
-        {/* Question history */}
         <div style={{ padding:'0 1rem 2rem' }}>
           <p style={{ fontSize:'12px', fontWeight:600, color:'rgba(255,255,255,0.35)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'10px' }}>
             Alla frågor — {hist.length} st
           </p>
           {hist.map((h, i) => (
-            <div key={i} style={{
-              background: h.result === 'correct' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-              border: `1px solid ${h.result === 'correct' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
-              borderRadius:'14px', padding:'10px 14px', marginBottom:'8px',
-            }}>
+            <div key={i} style={{ background: h.result === 'correct' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', border:`1px solid ${h.result === 'correct' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius:'14px', padding:'10px 14px', marginBottom:'8px' }}>
               <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
                 <span style={{ fontSize:'16px', flexShrink:0, marginTop:'1px' }}>
                   {h.result === 'correct' ? '✅' : h.result === 'missed' ? '⏰' : '❌'}
@@ -280,15 +312,21 @@ export default function KidsGame() {
   if (!started) return (
     <Screen>
       <button onClick={() => navigate(`/kids/${childId}`)} style={{ ...ghostBtn, position:'absolute', top:'1.5rem', left:'1rem' }}>← Tillbaka</button>
-      <p style={{ fontSize:'64px', marginBottom:'0.5rem' }}>🎮</p>
+      <p style={{ fontSize:'64px', marginBottom:'0.5rem' }}>🐒</p>
       <h1 style={{ fontFamily:'var(--font-display)', fontSize:'2.25rem', fontWeight:400, color:'#fff', marginBottom:'0.5rem' }}>Läxspelet</h1>
-      <p style={{ ...dimText, marginBottom:'2rem', maxWidth:'280px', textAlign:'center', lineHeight:1.6 }}>
-        Stoppa figurerna innan de når dina svarsknappar — svara rätt!
+      <p style={{ ...dimText, marginBottom:'1.5rem', maxWidth:'280px', textAlign:'center', lineHeight:1.6 }}>
+        Stoppa apan med kokosnötter — svara rätt!
       </p>
-      <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'2rem', width:'260px' }}>
-        {[['❤️❤️❤️','3 liv — missa och du förlorar ett'],['🔥 ×2','3 rätt i rad = dubbla poäng'],['🚀 ×3','6 rätt i rad = trippla poäng'],['⚡','Figurerna snabbas upp!']].map(([icon, text]) => (
+      <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'2rem', width:'270px' }}>
+        {[
+          ['❤️❤️❤️', '3 liv — missa och du förlorar ett'],
+          ['🥥→🍌→🍍→🔥', 'Bättre vapen vid streak!'],
+          ['❤️ Extraliv', 'Var 5:e rätt i rad'],
+          ['🔥 ×2/×3/×4', 'Streak = mer poäng'],
+          ['⚡ Level up', 'Var 15:e poäng — snabbare!'],
+        ].map(([icon, text]) => (
           <div key={text} style={{ display:'flex', gap:'12px', alignItems:'center', color:'rgba(255,255,255,0.7)', fontSize:'13px', fontFamily:'var(--font-body)' }}>
-            <span style={{ fontSize:'16px', width:'52px', textAlign:'center', flexShrink:0 }}>{icon}</span>
+            <span style={{ fontSize:'15px', width:'80px', textAlign:'center', flexShrink:0 }}>{icon}</span>
             <span>{text}</span>
           </div>
         ))}
@@ -301,77 +339,100 @@ export default function KidsGame() {
   // ── Main game ──────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', flexDirection:'column', fontFamily:'var(--font-body)', overflow:'hidden', position:'relative' }}>
+    <div style={{ minHeight:'100dvh', background: bgGradient, display:'flex', flexDirection:'column', fontFamily:'var(--font-body)', overflow:'hidden', position:'relative', transition:'background 1s' }}>
       <style>{`
         @keyframes charSlide {
           from { top: -120px; }
           to   { top: calc(100dvh - 220px - env(safe-area-inset-bottom, 0px)); }
         }
         .char-slide { animation: charSlide linear forwards; }
-
         @keyframes dangerPulse {
           0%,100% { opacity:0.6; } 50% { opacity:1; }
         }
-        @keyframes coconutFly {
-          from { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
-          to   { transform: translate(-50%, calc(var(--travel) * 1px)) rotate(720deg); opacity: 1; }
+        @keyframes projFly {
+          from { transform: translate(-50%, 0) rotate(0deg); opacity:1; }
+          to   { transform: translate(-50%, calc(var(--travel) * 1px)) rotate(720deg); opacity:1; }
         }
-        @keyframes coconutMiss {
-          0%   { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
-          60%  { transform: translate(calc(-50% + 140px), calc(var(--travel) * 0.6px)) rotate(400deg); opacity: 1; }
-          100% { transform: translate(calc(-50% + 280px), calc(var(--travel) * 0.3px)) rotate(700deg); opacity: 0; }
+        @keyframes projMiss {
+          0%   { transform: translate(-50%, 0) rotate(0deg); opacity:1; }
+          60%  { transform: translate(calc(-50% + 140px), calc(var(--travel) * 0.6px)) rotate(400deg); opacity:1; }
+          100% { transform: translate(calc(-50% + 280px), calc(var(--travel) * 0.3px)) rotate(700deg); opacity:0; }
         }
         @keyframes monkeyHitAnim {
           0%   { transform: translateX(-50%) scale(1) rotate(0deg); opacity:1; }
-          30%  { transform: translateX(-50%) scale(1.4) rotate(-25deg); opacity:1; }
-          60%  { transform: translateX(-50%) scale(0.6) rotate(20deg); opacity:0.7; }
-          100% { transform: translateX(-50%) scale(0) rotate(45deg); opacity:0; }
+          30%  { transform: translateX(-50%) scale(1.5) rotate(-30deg); opacity:1; }
+          60%  { transform: translateX(-50%) scale(0.5) rotate(25deg); opacity:0.7; }
+          100% { transform: translateX(-50%) scale(0) rotate(60deg); opacity:0; }
+        }
+        @keyframes toastAnim {
+          0%   { opacity:0; transform:translateY(10px) translateX(-50%); }
+          15%  { opacity:1; transform:translateY(0) translateX(-50%); }
+          80%  { opacity:1; transform:translateY(0) translateX(-50%); }
+          100% { opacity:0; transform:translateY(-10px) translateX(-50%); }
+        }
+        @keyframes scorePop {
+          0%   { opacity:1; transform:translateY(0); }
+          100% { opacity:0; transform:translateY(-40px); }
+        }
+        @keyframes livePulse {
+          0%,100% { transform:scale(1); }
+          50%     { transform:scale(1.3); }
         }
       `}</style>
 
+      {/* Toast */}
+      {toast && (
+        <div style={{ position:'fixed', top:'80px', left:'50%', zIndex:100, background:'rgba(0,0,0,0.75)', color: toast.color, fontWeight:700, fontSize:'18px', borderRadius:'16px', padding:'10px 22px', animation:'toastAnim 1.8s ease forwards', pointerEvents:'none', whiteSpace:'nowrap' }}>
+          {toast.text}
+        </div>
+      )}
+
+      {/* Score pop */}
+      {scorePop && (
+        <div style={{ position:'fixed', top:'120px', right:'24px', zIndex:100, color:'#FBBF24', fontWeight:900, fontSize:'24px', animation:'scorePop 0.7s ease forwards', pointerEvents:'none' }}>
+          {scorePop}
+        </div>
+      )}
+
       {/* HUD */}
       <div style={{ padding:'1rem 1rem 0', display:'flex', justifyContent:'space-between', alignItems:'center', zIndex:10, flexShrink:0 }}>
-        <div style={{ display:'flex', gap:'6px' }}>
-          {[1,2,3].map(i => (
-            <span key={i} style={{ fontSize:'22px', opacity: i <= lives ? 1 : 0.2, transition:'opacity .3s' }}>❤️</span>
+        <div style={{ display:'flex', gap:'4px' }}>
+          {Array.from({ length: Math.max(lives, 3) }).map((_, i) => (
+            <span key={i} style={{ fontSize:'20px', opacity: i < lives ? 1 : 0.15, transition:'opacity .3s', display:'inline-block' }}>❤️</span>
           ))}
         </div>
-        <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
+        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
           {streak >= 3 && (
-            <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:'10px', padding:'5px 10px', color:'#fff', fontWeight:700, fontSize:'13px' }}>
-              {streak >= 6 ? '🚀' : '🔥'} ×{multiplier}
+            <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:'10px', padding:'4px 10px', color:'#FBBF24', fontWeight:700, fontSize:'13px' }}>
+              {weapon} ×{multiplier}
             </div>
           )}
-          <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:'10px', padding:'5px 12px', color:'#fff', fontWeight:700, fontSize:'16px' }}>
+          <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:'10px', padding:'4px 10px', color:'#fff', fontWeight:700, fontSize:'13px' }}>
+            ⚡ {level}
+          </div>
+          <div style={{ background:'rgba(255,255,255,0.12)', borderRadius:'10px', padding:'4px 12px', color:'#fff', fontWeight:700, fontSize:'16px' }}>
             ⭐ {score}
           </div>
         </div>
       </div>
 
-      {/* Question — static at top */}
+      {/* Question */}
       {current && (
-        <div style={{ margin:'1rem 1rem 0', flexShrink:0, zIndex:10 }}>
+        <div style={{ margin:'0.75rem 1rem 0', flexShrink:0, zIndex:10 }}>
           <div style={{
             background: answered === 'missed' ? 'rgba(239,68,68,0.85)'
               : answered && norm(answered) === norm(current.correct_answer) ? 'rgba(34,197,94,0.85)'
               : answered ? 'rgba(239,68,68,0.85)'
               : 'rgba(255,255,255,0.95)',
-            borderRadius:'20px',
-            padding:'1.25rem 1.5rem',
-            boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
-            transition:'background 0.15s',
+            borderRadius:'20px', padding:'1rem 1.25rem',
+            boxShadow:'0 4px 24px rgba(0,0,0,0.4)', transition:'background 0.15s',
           }}>
-            <p style={{
-              fontSize:'18px', fontWeight:600, lineHeight:1.4, margin:0,
-              color: answered ? '#fff' : '#1A1916',
-            }}>
+            <p style={{ fontSize:'17px', fontWeight:600, lineHeight:1.4, margin:0, color: answered ? '#fff' : '#1A1916' }}>
               {answered === 'missed' ? '⏰ Missad! ' : answered && norm(answered) !== norm(current.correct_answer) ? '❌ ' : answered ? '✅ ' : ''}
               {current.question}
             </p>
             {answered && answered !== 'missed' && norm(answered) !== norm(current.correct_answer) && (
-              <p style={{ color:'rgba(255,255,255,0.9)', fontSize:'13px', margin:'6px 0 0' }}>
-                Rätt: {current.correct_answer}
-              </p>
+              <p style={{ color:'rgba(255,255,255,0.9)', fontSize:'13px', margin:'5px 0 0' }}>Rätt: {current.correct_answer}</p>
             )}
           </div>
         </div>
@@ -383,11 +444,9 @@ export default function KidsGame() {
           key={slideKey}
           className="char-slide"
           style={{
-            animationDuration: `${durationRef.current}ms`,
-            animationPlayState: monkeyHit ? 'paused' : 'running',
             position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 5, textAlign: 'center',
             animation: monkeyHit
-              ? `monkeyHitAnim 0.5s ease-out forwards`
+              ? 'monkeyHitAnim 0.5s ease-out forwards'
               : `charSlide ${durationRef.current}ms linear forwards`,
           }}
         >
@@ -396,28 +455,24 @@ export default function KidsGame() {
         </div>
       )}
 
-      {/* Kokosnöt */}
-      {showCoconut && (
+      {/* Projectile */}
+      {showProjectile && (
         <div style={{
-          position: 'fixed',
-          bottom: '160px',
-          left: '50%',
-          fontSize: '42px',
+          position: 'fixed', bottom: '160px', left: '50%',
+          fontSize: projectileType === '🔥' ? '52px' : '40px',
           zIndex: 50,
-          animation: coconutMiss
-            ? 'coconutMiss 0.55s ease-out forwards'
-            : 'coconutFly 0.4s ease-in forwards',
-          '--travel': coconutY,
+          animation: projectileMiss ? 'projMiss 0.55s ease-out forwards' : 'projFly 0.4s ease-in forwards',
+          '--travel': projectileY,
+          filter: projectileType === '🔥' ? 'drop-shadow(0 0 8px orange)' : 'none',
         }}>
-          🥥
+          {projectileType}
         </div>
       )}
 
-      {/* Spacer */}
       <div style={{ flex:1 }} />
 
       {/* Answer buttons */}
-      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns: current?.type === 'true_false' ? '1fr 1fr' : '1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
+      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
         {current?.options?.map((opt, i) => {
           const isCorrect = norm(opt) === norm(current?.correct_answer)
           const isChosen  = answered === opt
@@ -430,7 +485,7 @@ export default function KidsGame() {
           return (
             <button key={opt} onClick={() => handleAnswer(opt)} disabled={answered !== null} style={{
               padding:'18px 12px', borderRadius:'16px', border:'none',
-              background:bg, color:'#fff', fontSize:'15px', fontWeight:600,
+              background: bg, color:'#fff', fontSize:'15px', fontWeight:600,
               cursor: answered !== null ? 'default' : 'pointer',
               fontFamily:'var(--font-body)', lineHeight:1.3, textAlign:'center',
               transition:'background 0.15s',
@@ -446,7 +501,6 @@ export default function KidsGame() {
   )
 }
 
-// ── Shared styles ──────────────────────────────────────────────
 function Screen({ children }) {
   return (
     <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:'2rem', position:'relative' }}>
