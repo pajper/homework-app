@@ -37,6 +37,7 @@ export default function KidsGame() {
   const streakRef     = useRef(0)
   const matsRef       = useRef([])
   const generatingRef = useRef(false)
+  const historyRef    = useRef([]) // { question, chosen, correct, result: 'correct'|'wrong'|'missed' }
 
   useEffect(() => { fetchQuestions() }, [childId])
   useEffect(() => () => clearTimeout(timerRef.current), [])
@@ -122,6 +123,7 @@ export default function KidsGame() {
       durationRef.current = BASE_DURATION
 
       setAnswered('missed')
+      historyRef.current.push({ question: current?.question, chosen: null, correct: current?.correct_answer, result: 'missed' })
 
       if (newLives <= 0) {
         setTimeout(() => setGameOver(true), FEEDBACK_MS)
@@ -132,10 +134,11 @@ export default function KidsGame() {
   }
 
   function startGame() {
-    livesRef.current  = 3
-    streakRef.current = 0
+    livesRef.current    = 3
+    streakRef.current   = 0
     durationRef.current = BASE_DURATION
-    idxRef.current    = 0
+    idxRef.current      = 0
+    historyRef.current  = []
     setStarted(true)
     setScore(0)
     setStreak(0)
@@ -150,6 +153,7 @@ export default function KidsGame() {
 
     const correct = norm(opt) === norm(current.correct_answer)
     setAnswered(opt)
+    historyRef.current.push({ question: current.question, chosen: opt, correct: current.correct_answer, result: correct ? 'correct' : 'wrong' })
 
     if (correct) {
       const newStreak = streakRef.current + 1
@@ -189,16 +193,68 @@ export default function KidsGame() {
     </Screen>
   )
 
-  if (gameOver) return (
-    <Screen>
-      <p style={{ fontSize:'72px', marginBottom:'0.5rem' }}>💀</p>
-      <h2 style={{ fontFamily:'var(--font-display)', fontSize:'2rem', color:'#fff', fontWeight:400, marginBottom:'0.25rem' }}>Game over!</h2>
-      <p style={{ ...dimText, marginBottom:'0.25rem' }}>Poäng: <strong style={{ color:'#fff' }}>{score}</strong></p>
-      {best > 0 && <p style={{ ...dimText, marginBottom:'2rem' }}>Bästa streak: 🔥 {best}</p>}
-      <button onClick={startGame} style={primaryBtn}>Spela igen</button>
-      <button onClick={() => navigate(`/kids/${childId}`)} style={{ ...ghostBtn, marginTop:'10px' }}>← Tillbaka till läxor</button>
-    </Screen>
-  )
+  if (gameOver) {
+    const hist = historyRef.current
+    const nCorrect = hist.filter(h => h.result === 'correct').length
+    const nWrong   = hist.filter(h => h.result === 'wrong').length
+    const nMissed  = hist.filter(h => h.result === 'missed').length
+    return (
+      <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', fontFamily:'var(--font-body)', overflowY:'auto' }}>
+        {/* Header */}
+        <div style={{ padding:'1.5rem 1rem 1rem', textAlign:'center' }}>
+          <p style={{ fontSize:'56px', margin:'0 0 0.25rem' }}>💀</p>
+          <h2 style={{ fontFamily:'var(--font-display)', fontSize:'2rem', color:'#fff', fontWeight:400, margin:'0 0 0.75rem' }}>Game over!</h2>
+          <div style={{ display:'flex', justifyContent:'center', gap:'16px', marginBottom:'1.25rem' }}>
+            <div style={{ background:'rgba(255,255,255,0.1)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
+              <div style={{ fontSize:'22px', fontWeight:700, color:'#fff' }}>⭐ {score}</div>
+              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>poäng</div>
+            </div>
+            <div style={{ background:'rgba(34,197,94,0.2)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
+              <div style={{ fontSize:'22px', fontWeight:700, color:'#22C55E' }}>✅ {nCorrect}</div>
+              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>rätt</div>
+            </div>
+            <div style={{ background:'rgba(239,68,68,0.2)', borderRadius:'14px', padding:'10px 18px', textAlign:'center' }}>
+              <div style={{ fontSize:'22px', fontWeight:700, color:'#EF4444' }}>❌ {nWrong + nMissed}</div>
+              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)' }}>fel/missad</div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
+            <button onClick={startGame} style={primaryBtn}>Spela igen</button>
+            <button onClick={() => navigate(`/kids/${childId}`)} style={ghostBtn}>← Läxor</button>
+          </div>
+        </div>
+
+        {/* Question history */}
+        <div style={{ padding:'0 1rem 2rem' }}>
+          <p style={{ fontSize:'12px', fontWeight:600, color:'rgba(255,255,255,0.35)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'10px' }}>
+            Alla frågor — {hist.length} st
+          </p>
+          {hist.map((h, i) => (
+            <div key={i} style={{
+              background: h.result === 'correct' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+              border: `1px solid ${h.result === 'correct' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              borderRadius:'14px', padding:'10px 14px', marginBottom:'8px',
+            }}>
+              <div style={{ display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                <span style={{ fontSize:'16px', flexShrink:0, marginTop:'1px' }}>
+                  {h.result === 'correct' ? '✅' : h.result === 'missed' ? '⏰' : '❌'}
+                </span>
+                <div style={{ flex:1 }}>
+                  <p style={{ color:'#fff', fontSize:'13px', fontWeight:600, margin:'0 0 4px', lineHeight:1.4 }}>{h.question}</p>
+                  {h.result !== 'correct' && (
+                    <p style={{ color:'rgba(255,255,255,0.5)', fontSize:'12px', margin:0 }}>
+                      {h.result === 'missed' ? 'Hann inte svara · ' : `Du svarade: ${h.chosen} · `}
+                      <span style={{ color:'#22C55E' }}>Rätt: {h.correct}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (!started) return (
     <Screen>
