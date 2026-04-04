@@ -181,11 +181,11 @@ export default function KidsGame() {
   // ── Main game ──────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', flexDirection:'column', fontFamily:'var(--font-body)', overflow:'hidden', position:'relative' }}>
+    <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', flexDirection:'column', fontFamily:'var(--font-body)', overflow:'hidden', position:'relative' }}>
       <style>{`
         @keyframes charSlide {
           from { top: -120px; }
-          to   { top: calc(100vh - 180px); }
+          to   { top: calc(100dvh - 220px - env(safe-area-inset-bottom, 0px)); }
         }
         .char-slide { animation: charSlide linear forwards; }
 
@@ -260,7 +260,7 @@ export default function KidsGame() {
       <div style={{ flex:1 }} />
 
       {/* Answer buttons */}
-      <div style={{ padding:'0.75rem', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
+      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
         {current?.options?.map((opt, i) => {
           const isCorrect = norm(opt) === norm(current?.correct_answer)
           const isChosen  = answered === opt
@@ -292,7 +292,7 @@ export default function KidsGame() {
 // ── Shared styles ──────────────────────────────────────────────
 function Screen({ children }) {
   return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:'2rem', position:'relative' }}>
+    <div style={{ minHeight:'100dvh', background:'linear-gradient(160deg,#1A0A3B 0%,#0F172A 100%)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', padding:'2rem', position:'relative' }}>
       {children}
     </div>
   )

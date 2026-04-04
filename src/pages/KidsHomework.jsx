@@ -303,7 +303,6 @@ ${harder ? '- Fokusera på svåra och komplexa frågor, gärna från fördjupnin
     ]
   }
 
-  const prompt = `Skapa ${count} övningsfrågor på svenska för ämnet: ${material.subject}.${difficultyNote}${PROMPT_SUFFIX}`
   return `Skapa ${count} övningsfrågor på svenska för följande läxmaterial.\nÄmne: ${material.subject}\nMaterial: ${material.content}${difficultyNote}${PROMPT_SUFFIX}`
 }
 
@@ -450,7 +449,7 @@ export default function KidsHomework() {
   const goodScore = gradedTotal > 0 && score.correct / gradedTotal >= 0.8
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F0EEF8', fontFamily: 'var(--font-body)' }}>
+    <div style={{ minHeight: '100dvh', background: '#F0EEF8', fontFamily: 'var(--font-body)' }}>
 
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #534AB7 0%, #7C6FD4 100%)', padding: '1.25rem 1rem 3rem', color: '#fff' }}>
