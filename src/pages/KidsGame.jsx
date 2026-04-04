@@ -4,9 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useChildAuth } from '../context/ChildAuthContext'
 
 const BASE_DURATION = 7000
-const FEEDBACK_MS   = 700
+const FEEDBACK_MS   = 600
 const OPTION_COLORS = ['#534AB7', '#1D9E75', '#D85A30', '#D4537E']
-const CHARACTERS    = ['👾', '🤖', '👻', '🐉', '🦹', '🧟', '🐙', '🦑', '👿', '🎃']
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5) }
 function norm(s) { return s?.toLowerCase().trim() }
@@ -14,20 +13,23 @@ function norm(s) { return s?.toLowerCase().trim() }
 export default function KidsGame() {
   const { childId } = useParams()
   const navigate    = useNavigate()
-  const { childUser } = useChildAuth()
+  useChildAuth()
 
   const [loading,     setLoading]     = useState(true)
   const [noQuestions, setNoQuestions] = useState(false)
   const [started,     setStarted]     = useState(false)
   const [current,     setCurrent]     = useState(null)
-  const [character,   setCharacter]   = useState('👾')
   const [slideKey,    setSlideKey]    = useState(0)
   const [answered,    setAnswered]    = useState(null)
   const [score,       setScore]       = useState(0)
   const [streak,      setStreak]      = useState(0)
   const [best,        setBest]        = useState(0)
-  const [lives,       setLives]       = useState(3)
-  const [gameOver,    setGameOver]    = useState(false)
+  const [lives,        setLives]        = useState(3)
+  const [gameOver,     setGameOver]     = useState(false)
+  const [showCoconut,  setShowCoconut]  = useState(false)
+  const [coconutY,     setCoconutY]     = useState(0)
+  const [coconutMiss,  setCoconutMiss]  = useState(false)
+  const [monkeyHit,    setMonkeyHit]    = useState(false)
 
   const questionsRef  = useRef([])
   const idxRef        = useRef(0)
@@ -105,12 +107,13 @@ export default function KidsGame() {
     // Generera fler frågor i bakgrunden när halva poolen är använd
     if (idx >= Math.floor(qs.length / 2)) generateMoreQuestions()
 
-    const q   = qs[idx]
-    const chr = CHARACTERS[idx % CHARACTERS.length]
+    const q = qs[idx]
 
     setCurrent(q)
-    setCharacter(chr)
     setAnswered(null)
+    setMonkeyHit(false)
+    setShowCoconut(false)
+    setCoconutMiss(false)
     setSlideKey(k => k + 1)
 
     timerRef.current = setTimeout(() => {
@@ -163,6 +166,15 @@ export default function KidsGame() {
       setScore(s => s + pts)
       setBest(b => Math.max(b, newStreak))
       durationRef.current = Math.max(2500, BASE_DURATION - newStreak * 300)
+      // Kasta kokosnöt mot apan
+      const monkeyEl = document.querySelector('.char-slide')
+      if (monkeyEl) {
+        const rect = monkeyEl.getBoundingClientRect()
+        const travel = -(window.innerHeight - 160 - (rect.top + rect.height / 2))
+        setCoconutY(travel)
+      }
+      setShowCoconut(true)
+      setTimeout(() => setMonkeyHit(true), 350)
     } else {
       const newLives = livesRef.current - 1
       livesRef.current = newLives
@@ -170,6 +182,15 @@ export default function KidsGame() {
       streakRef.current = 0
       setStreak(0)
       durationRef.current = BASE_DURATION
+      // Kasta kokosnöt som skjuter förbi apan med liten vinkel
+      const monkeyEl = document.querySelector('.char-slide')
+      if (monkeyEl) {
+        const rect = monkeyEl.getBoundingClientRect()
+        const travel = -(window.innerHeight - 160 - (rect.top + rect.height / 2))
+        setCoconutY(travel)
+      }
+      setCoconutMiss(true)
+      setShowCoconut(true)
     }
 
     if (livesRef.current <= 0) {
@@ -291,6 +312,21 @@ export default function KidsGame() {
         @keyframes dangerPulse {
           0%,100% { opacity:0.6; } 50% { opacity:1; }
         }
+        @keyframes coconutFly {
+          from { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
+          to   { transform: translate(-50%, calc(var(--travel) * 1px)) rotate(720deg); opacity: 1; }
+        }
+        @keyframes coconutMiss {
+          0%   { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
+          60%  { transform: translate(calc(-50% + 140px), calc(var(--travel) * 0.6px)) rotate(400deg); opacity: 1; }
+          100% { transform: translate(calc(-50% + 280px), calc(var(--travel) * 0.3px)) rotate(700deg); opacity: 0; }
+        }
+        @keyframes monkeyHitAnim {
+          0%   { transform: translateX(-50%) scale(1) rotate(0deg); opacity:1; }
+          30%  { transform: translateX(-50%) scale(1.4) rotate(-25deg); opacity:1; }
+          60%  { transform: translateX(-50%) scale(0.6) rotate(20deg); opacity:0.7; }
+          100% { transform: translateX(-50%) scale(0) rotate(45deg); opacity:0; }
+        }
       `}</style>
 
       {/* HUD */}
@@ -341,17 +377,39 @@ export default function KidsGame() {
         </div>
       )}
 
-      {/* Sliding character */}
+      {/* Sliding monkey */}
       {current && (
         <div
           key={slideKey}
           className="char-slide"
-          style={{ animationDuration:`${durationRef.current}ms`, position:'absolute', left:'50%', transform:'translateX(-50%)', zIndex:5, textAlign:'center' }}
+          style={{
+            animationDuration: `${durationRef.current}ms`,
+            animationPlayState: monkeyHit ? 'paused' : 'running',
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 5, textAlign: 'center',
+            animation: monkeyHit
+              ? `monkeyHitAnim 0.5s ease-out forwards`
+              : `charSlide ${durationRef.current}ms linear forwards`,
+          }}
         >
-          <div style={{ fontSize:'64px', filter:'drop-shadow(0 0 12px rgba(255,100,100,0.6))', lineHeight:1 }}>
-            {character}
-          </div>
-          <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'rgba(255,100,100,0.4)', margin:'4px auto 0', animation:'dangerPulse 0.8s ease-in-out infinite' }} />
+          <div style={{ fontSize:'64px', lineHeight:1 }}>🐒</div>
+          {!monkeyHit && <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'rgba(255,100,100,0.4)', margin:'4px auto 0', animation:'dangerPulse 0.8s ease-in-out infinite' }} />}
+        </div>
+      )}
+
+      {/* Kokosnöt */}
+      {showCoconut && (
+        <div style={{
+          position: 'fixed',
+          bottom: '160px',
+          left: '50%',
+          fontSize: '42px',
+          zIndex: 50,
+          animation: coconutMiss
+            ? 'coconutMiss 0.55s ease-out forwards'
+            : 'coconutFly 0.4s ease-in forwards',
+          '--travel': coconutY,
+        }}>
+          🥥
         </div>
       )}
 

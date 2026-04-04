@@ -379,12 +379,15 @@ export default function KidsHomework() {
     fetchMaterials()
   }
 
-  async function fetchExercises(matId) {
+  async function fetchExercises(matId, count) {
     setLoadingExercises(true)
     setScore({ correct: 0, answered: 0, open: 0 })
     sessionSaved.current = false
     const { data } = await supabase.from('exercises').select('*').eq('material_id', matId)
-    setExercises(data ?? [])
+    // Shuffle and slice to requested count
+    const all = data ?? []
+    const shuffled = [...all].sort(() => Math.random() - 0.5)
+    setExercises(shuffled.slice(0, count ?? questionCount))
     setLoadingExercises(false)
   }
 
@@ -420,9 +423,8 @@ export default function KidsHomework() {
       const raw = data.content[0].text.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(raw)
       const toInsert = parsed.map(ex => ({ ...ex, material_id: selectedMaterial.id, child_id: childId }))
-      await supabase.from('exercises').delete().eq('material_id', selectedMaterial.id)
       await supabase.from('exercises').insert(toInsert)
-      fetchExercises(selectedMaterial.id)
+      fetchExercises(selectedMaterial.id, questionCount)
     } catch (err) {
       console.error('Generate error:', err)
       alert('Något gick fel: ' + err.message)
@@ -437,7 +439,7 @@ export default function KidsHomework() {
 
   function selectMaterial(m) {
     setSelectedMaterial(m)
-    fetchExercises(m.id)
+    fetchExercises(m.id, questionCount)
     setTimeout(() => {
       document.getElementById('exercises-section')?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
@@ -541,7 +543,7 @@ export default function KidsHomework() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   {[5, 10, 15, 20].map(n => (
-                    <button key={n} onClick={() => setQuestionCount(n)} style={{
+                    <button key={n} onClick={() => { setQuestionCount(n); if (selectedMaterial) fetchExercises(selectedMaterial.id, n) }} style={{
                       padding: '4px 10px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
                       background: questionCount === n ? '#534AB7' : '#F0EEF8',
                       color: questionCount === n ? '#fff' : '#6B6860',
