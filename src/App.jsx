@@ -7,6 +7,7 @@ import ChildSelect from './pages/ChildSelect'
 import ChildView from './pages/ChildView'
 import KidsHomework from './pages/KidsHomework'
 import KidsGame from './pages/KidsGame'
+import MultiplicationGame from './pages/MultiplicationGame'
 import UploadMaterial from './pages/UploadMaterial'
 
 function ProtectedRoute({ children, requireRole }) {
@@ -58,6 +59,9 @@ export default function App() {
       <Route path="/kids/:childId/game" element={
         <ChildProtectedRoute><KidsGame /></ChildProtectedRoute>
       } />
+
+      {/* Multiplikationsspelet — ingen inloggning krävs */}
+      <Route path="/multiply" element={<MultiplicationGame />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
