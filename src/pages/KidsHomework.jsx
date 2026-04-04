@@ -474,6 +474,9 @@ export default function KidsHomework() {
                 <div style={{ fontSize: '11px', opacity: 0.85 }}>{score.open > 0 ? `rätt · ${score.open} öppna` : 'rätt'}</div>
               </div>
             )}
+            <button onClick={() => navigate(`/kids/${childId}/game`)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              🎮 Spela
+            </button>
             <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '12px', padding: '8px 12px', fontSize: '13px', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Byt
             </button>

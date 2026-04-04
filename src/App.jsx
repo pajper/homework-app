@@ -6,6 +6,7 @@ import ParentDashboard from './pages/ParentDashboard'
 import ChildSelect from './pages/ChildSelect'
 import ChildView from './pages/ChildView'
 import KidsHomework from './pages/KidsHomework'
+import KidsGame from './pages/KidsGame'
 import UploadMaterial from './pages/UploadMaterial'
 
 function ProtectedRoute({ children, requireRole }) {
@@ -53,6 +54,9 @@ export default function App() {
       <Route path="/kids" element={<ChildSelect />} />
       <Route path="/kids/:childId" element={
         <ChildProtectedRoute><KidsHomework /></ChildProtectedRoute>
+      } />
+      <Route path="/kids/:childId/game" element={
+        <ChildProtectedRoute><KidsGame /></ChildProtectedRoute>
       } />
 
       <Route path="*" element={<Navigate to="/" replace />} />
