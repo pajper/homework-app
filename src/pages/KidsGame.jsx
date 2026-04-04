@@ -20,8 +20,43 @@ const LEVEL_BACKGROUNDS = [
   'linear-gradient(160deg,#1A0A2B 0%,#120A1F 100%)',
 ]
 
+const OPTION_COLORS_6 = ['#534AB7', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#BA7517']
+
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5) }
 function norm(s) { return s?.toLowerCase().trim() }
+
+// Generera alla multiplikationsfrågor 1–10 × 1–10
+function buildMultiplicationQuestions() {
+  const qs = []
+  for (let a = 1; a <= 10; a++) {
+    for (let b = 1; b <= 10; b++) {
+      const answer = a * b
+      // Distraktorer: andra svar från samma tabell + grannar
+      const sameTable = []
+      for (let i = 1; i <= 10; i++) {
+        const v = a * i
+        if (v !== answer) sameTable.push(String(v))
+      }
+      const neighbors = []
+      for (let d = -3; d <= 3; d++) {
+        const v = answer + d
+        if (d !== 0 && v > 0 && !sameTable.includes(String(v))) neighbors.push(String(v))
+      }
+      const pool = shuffle([...sameTable, ...neighbors])
+      const distractors = pool.slice(0, 5)
+      const options = shuffle([String(answer), ...distractors])
+      qs.push({
+        id: `mult-${a}-${b}`,
+        type: 'multiple_choice',
+        question: `${a} × ${b} = ?`,
+        options,
+        correct_answer: String(answer),
+        _a: a, _b: b,
+      })
+    }
+  }
+  return shuffle(qs)
+}
 
 export default function KidsGame() {
   const { childId } = useParams()
@@ -31,6 +66,7 @@ export default function KidsGame() {
   const [loading,     setLoading]     = useState(true)
   const [noQuestions, setNoQuestions] = useState(false)
   const [started,     setStarted]     = useState(false)
+  const [gameMode,    setGameMode]    = useState('normal') // 'normal' | 'multiplication'
   const [current,     setCurrent]     = useState(null)
   const [slideKey,    setSlideKey]    = useState(0)
   const [answered,    setAnswered]    = useState(null)
@@ -129,7 +165,7 @@ export default function KidsGame() {
     let idx = idxRef.current
     if (idx >= qs.length) { qs = shuffle(qs); questionsRef.current = qs; idx = 0 }
     idxRef.current = idx + 1
-    if (idx >= Math.floor(qs.length / 2)) generateMoreQuestions()
+    if (gameMode === 'normal' && idx >= Math.floor(qs.length / 2)) generateMoreQuestions()
 
     setCurrent(qs[idx])
     setAnswered(null)
@@ -160,6 +196,9 @@ export default function KidsGame() {
     durationRef.current = BASE_DURATION
     idxRef.current      = 0
     historyRef.current  = []
+    if (gameMode === 'multiplication') {
+      questionsRef.current = buildMultiplicationQuestions()
+    }
     setStarted(true)
     setScore(0)
     setStreak(0)
@@ -312,26 +351,47 @@ export default function KidsGame() {
   if (!started) return (
     <Screen>
       <button onClick={() => navigate(`/kids/${childId}`)} style={{ ...ghostBtn, position:'absolute', top:'1.5rem', left:'1rem' }}>← Tillbaka</button>
-      <p style={{ fontSize:'64px', marginBottom:'0.5rem' }}>🐒</p>
-      <h1 style={{ fontFamily:'var(--font-display)', fontSize:'2.25rem', fontWeight:400, color:'#fff', marginBottom:'0.5rem' }}>Läxspelet</h1>
-      <p style={{ ...dimText, marginBottom:'1.5rem', maxWidth:'280px', textAlign:'center', lineHeight:1.6 }}>
-        Stoppa apan med kokosnötter — svara rätt!
-      </p>
-      <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'2rem', width:'270px' }}>
+      <p style={{ fontSize:'56px', marginBottom:'0.5rem' }}>🐒</p>
+      <h1 style={{ fontFamily:'var(--font-display)', fontSize:'2.25rem', fontWeight:400, color:'#fff', marginBottom:'1.25rem' }}>Läxspelet</h1>
+
+      {/* Mode selector */}
+      <div style={{ display:'flex', gap:'10px', marginBottom:'1.5rem', width:'100%', maxWidth:'340px' }}>
+        {[['normal','📚 Läxfrågor'],['multiplication','✖️ Multiplikation']].map(([mode, label]) => (
+          <button key={mode} onClick={() => setGameMode(mode)} style={{
+            flex:1, padding:'12px 8px', borderRadius:'14px', border: gameMode === mode ? 'none' : '1.5px solid rgba(255,255,255,0.2)',
+            background: gameMode === mode ? 'linear-gradient(135deg,#534AB7,#7C6FD4)' : 'rgba(255,255,255,0.07)',
+            color:'#fff', fontWeight:700, fontSize:'14px', cursor:'pointer', fontFamily:'var(--font-body)',
+            boxShadow: gameMode === mode ? '0 4px 16px rgba(83,74,183,0.4)' : 'none',
+          }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {gameMode === 'multiplication' ? (
+        <p style={{ ...dimText, marginBottom:'1.5rem', textAlign:'center', lineHeight:1.6, maxWidth:'260px' }}>
+          Träna 1–10:ans tabell! 6 svarsalternativ — välj rätt innan apan når dig.
+        </p>
+      ) : (
+        <p style={{ ...dimText, marginBottom:'1.5rem', textAlign:'center', lineHeight:1.6, maxWidth:'260px' }}>
+          Stoppa apan med kokosnötter — svara rätt på dina läxfrågor!
+        </p>
+      )}
+
+      <div style={{ display:'flex', flexDirection:'column', gap:'7px', marginBottom:'1.75rem', width:'270px' }}>
         {[
-          ['❤️❤️❤️', '3 liv — missa och du förlorar ett'],
-          ['🥥→🍌→🍍→🔥', 'Bättre vapen vid streak!'],
+          ['🥥→🍌→🍍→🔥', 'Bättre vapen vid streak'],
           ['❤️ Extraliv', 'Var 5:e rätt i rad'],
           ['🔥 ×2/×3/×4', 'Streak = mer poäng'],
           ['⚡ Level up', 'Var 15:e poäng — snabbare!'],
         ].map(([icon, text]) => (
-          <div key={text} style={{ display:'flex', gap:'12px', alignItems:'center', color:'rgba(255,255,255,0.7)', fontSize:'13px', fontFamily:'var(--font-body)' }}>
-            <span style={{ fontSize:'15px', width:'80px', textAlign:'center', flexShrink:0 }}>{icon}</span>
+          <div key={text} style={{ display:'flex', gap:'12px', alignItems:'center', color:'rgba(255,255,255,0.65)', fontSize:'13px', fontFamily:'var(--font-body)' }}>
+            <span style={{ fontSize:'14px', width:'80px', textAlign:'center', flexShrink:0 }}>{icon}</span>
             <span>{text}</span>
           </div>
         ))}
       </div>
-      <button onClick={startGame} style={primaryBtn}>Starta spelet!</button>
+      <button onClick={startGame} style={primaryBtn}>Starta!</button>
       {best > 0 && <p style={{ ...dimText, fontSize:'12px', marginTop:'1rem' }}>Bästa streak: {best} 🔥</p>}
     </Screen>
   )
@@ -472,31 +532,39 @@ export default function KidsGame() {
       <div style={{ flex:1 }} />
 
       {/* Answer buttons */}
-      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
-        {current?.options?.map((opt, i) => {
-          const isCorrect = norm(opt) === norm(current?.correct_answer)
-          const isChosen  = answered === opt
-          let bg = OPTION_COLORS[i % OPTION_COLORS.length]
-          if (answered !== null) {
-            if (isCorrect) bg = '#22C55E'
-            else if (isChosen) bg = '#EF4444'
-            else bg = 'rgba(255,255,255,0.1)'
-          }
-          return (
-            <button key={opt} onClick={() => handleAnswer(opt)} disabled={answered !== null} style={{
-              padding:'18px 12px', borderRadius:'16px', border:'none',
-              background: bg, color:'#fff', fontSize:'15px', fontWeight:600,
-              cursor: answered !== null ? 'default' : 'pointer',
-              fontFamily:'var(--font-body)', lineHeight:1.3, textAlign:'center',
-              transition:'background 0.15s',
-              opacity: answered !== null && !isCorrect && !isChosen ? 0.3 : 1,
-              boxShadow: answered === null ? '0 4px 16px rgba(0,0,0,0.3)' : 'none',
-            }}>
-              {opt}
-            </button>
-          )
-        })}
-      </div>
+      {(() => {
+        const isMulti = gameMode === 'multiplication'
+        const colors  = isMulti ? OPTION_COLORS_6 : OPTION_COLORS
+        return (
+          <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns: isMulti ? '1fr 1fr 1fr' : '1fr 1fr', gap:'8px', flexShrink:0, zIndex:20 }}>
+            {current?.options?.map((opt, i) => {
+              const isCorrect = norm(opt) === norm(current?.correct_answer)
+              const isChosen  = answered === opt
+              let bg = colors[i % colors.length]
+              if (answered !== null) {
+                if (isCorrect) bg = '#22C55E'
+                else if (isChosen) bg = '#EF4444'
+                else bg = 'rgba(255,255,255,0.1)'
+              }
+              return (
+                <button key={opt} onClick={() => handleAnswer(opt)} disabled={answered !== null} style={{
+                  padding: isMulti ? '16px 6px' : '18px 12px',
+                  borderRadius:'16px', border:'none',
+                  background: bg, color:'#fff',
+                  fontSize: isMulti ? '20px' : '15px', fontWeight:700,
+                  cursor: answered !== null ? 'default' : 'pointer',
+                  fontFamily:'var(--font-body)', textAlign:'center',
+                  transition:'background 0.15s',
+                  opacity: answered !== null && !isCorrect && !isChosen ? 0.3 : 1,
+                  boxShadow: answered === null ? '0 4px 16px rgba(0,0,0,0.3)' : 'none',
+                }}>
+                  {opt}
+                </button>
+              )
+            })}
+          </div>
+        )
+      })()}
     </div>
   )
 }
