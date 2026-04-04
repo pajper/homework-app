@@ -29,29 +29,69 @@ export default function KidsGame() {
   const [lives,       setLives]       = useState(3)
   const [gameOver,    setGameOver]    = useState(false)
 
-  const questionsRef = useRef([])
-  const idxRef       = useRef(0)
-  const timerRef     = useRef(null)
-  const durationRef  = useRef(BASE_DURATION)
-  const livesRef     = useRef(3)
-  const streakRef    = useRef(0)
+  const questionsRef  = useRef([])
+  const idxRef        = useRef(0)
+  const timerRef      = useRef(null)
+  const durationRef   = useRef(BASE_DURATION)
+  const livesRef      = useRef(3)
+  const streakRef     = useRef(0)
+  const matsRef       = useRef([])
+  const generatingRef = useRef(false)
 
   useEffect(() => { fetchQuestions() }, [childId])
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
   async function fetchQuestions() {
     const { data: mats } = await supabase
-      .from('materials').select('id').eq('child_id', childId)
+      .from('materials').select('id, subject, content, type').eq('child_id', childId)
     if (!mats?.length) { setNoQuestions(true); setLoading(false); return }
+    matsRef.current = mats
 
     const { data: exs } = await supabase
       .from('exercises').select('*')
       .in('material_id', mats.map(m => m.id))
-      .eq('type', 'multiple_choice')
+      .in('type', ['multiple_choice', 'true_false'])
     if (!exs?.length) { setNoQuestions(true); setLoading(false); return }
 
     questionsRef.current = shuffle(exs)
     setLoading(false)
+  }
+
+  async function generateMoreQuestions() {
+    if (generatingRef.current || !matsRef.current.length) return
+    generatingRef.current = true
+    try {
+      const mat    = matsRef.current[Math.floor(Math.random() * matsRef.current.length)]
+      const isMath = mat.content?.startsWith('__MATH__:')
+      const isPdf  = mat.content?.startsWith('__PDF_BASE64__:')
+      const SUFFIX = `\n\nSvara ENDAST med ett JSON-array:\n[{"question":"...","type":"multiple_choice","options":["A","B","C","D"],"correct_answer":"A"}]\nType: multiple_choice eller true_false. För true_false: options=["Sant","Falskt"], correct_answer="Sant" eller "Falskt".`
+
+      let msgContent
+      if (isMath) {
+        msgContent = `Skapa 10 varierade matematikfrågor (multiple_choice) för: ${mat.content.slice('__MATH__:'.length)}${SUFFIX}`
+      } else if (isPdf) {
+        msgContent = [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: mat.content.slice('__PDF_BASE64__:'.length) } },
+          { type: 'text', text: `Skapa 10 nya varierade frågor (blanda multiple_choice och true_false) för ämnet: ${mat.subject}. Välj andra aspekter av innehållet än vanliga uppenbara frågor.${SUFFIX}` },
+        ]
+      } else {
+        msgContent = `Skapa 10 nya varierade frågor (blanda multiple_choice och true_false) för:\nÄmne: ${mat.subject}\nMaterial: ${mat.content}\nVälj oväntat och varierande aspekter av materialet.${SUFFIX}`
+      }
+
+      const res    = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: msgContent }] }),
+      })
+      const aiData = await res.json()
+      const parsed = JSON.parse(aiData.content[0].text.replace(/```json|```/g, '').trim())
+      const newQs  = parsed.map(q => ({ ...q, material_id: mat.id, child_id: childId, id: crypto.randomUUID() }))
+      supabase.from('exercises').insert(newQs).then(() => {})
+      questionsRef.current = [...questionsRef.current, ...shuffle(newQs)]
+    } catch (e) {
+      console.error('Kunde inte generera fler frågor:', e)
+    }
+    generatingRef.current = false
   }
 
   function showNext() {
@@ -60,6 +100,9 @@ export default function KidsGame() {
     let idx = idxRef.current
     if (idx >= qs.length) { qs = shuffle(qs); questionsRef.current = qs; idx = 0 }
     idxRef.current = idx + 1
+
+    // Generera fler frågor i bakgrunden när halva poolen är använd
+    if (idx >= Math.floor(qs.length / 2)) generateMoreQuestions()
 
     const q   = qs[idx]
     const chr = CHARACTERS[idx % CHARACTERS.length]
@@ -260,7 +303,7 @@ export default function KidsGame() {
       <div style={{ flex:1 }} />
 
       {/* Answer buttons */}
-      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
+      <div style={{ padding:'0.75rem', paddingBottom:'calc(0.75rem + env(safe-area-inset-bottom, 0px))', display:'grid', gridTemplateColumns: current?.type === 'true_false' ? '1fr 1fr' : '1fr 1fr', gap:'10px', flexShrink:0, zIndex:20 }}>
         {current?.options?.map((opt, i) => {
           const isCorrect = norm(opt) === norm(current?.correct_answer)
           const isChosen  = answered === opt
